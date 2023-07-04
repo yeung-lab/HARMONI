@@ -14,6 +14,7 @@ def parse_config(argv=None):
     parser.add_argument('--images', type=str, default='', help='Path to the input images folder')
     parser.add_argument('--video', type=str, default='', help='Path to the input video')
     parser.add_argument('--out_folder', type=str, default='', help='Where the results are saved')
+    parser.add_argument('--fps', type=int, default=1, help='FPS of the input video')
     
     parser.add_argument('--use_cached_dataset', default=False, action='store_true')
     parser.add_argument('--batch_size', type=int, default=16)
@@ -28,6 +29,7 @@ def parse_config(argv=None):
     parser.add_argument('--render', default=False, action='store_true')
     parser.add_argument('--side_view', default=False, action='store_true')
     parser.add_argument('--top_view', default=False, action='store_true')
+    parser.add_argument('--save_video', default=False, action='store_true')
     
     if argv:
         args = parser.parse_args(args=argv.split(' '))

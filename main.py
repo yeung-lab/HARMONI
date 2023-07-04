@@ -75,6 +75,8 @@ def main(args):
         adult_model = hps.get_dapa_model(cfg.dapa_adult_model, cfg.smpl_mean_params).cuda().eval()
         infant_model = hps.get_dapa_model(cfg.dapa_child_model, cfg.smpl_mean_params).cuda().eval()
         create_body_pose = True
+    elif args.hps == 'cliff':
+        raise NotImplementedError('Cliff model not implemented yet.')
     else:
         create_body_pose = False  # if use vposer, then create_body_pose = False
         raise NotImplementedError('Unknown hps model: ' + args.hps)
@@ -323,9 +325,21 @@ def main(args):
             dataset, results_holder, images_folder, out_render_path, cfg, cam_params, skip_if_no_infant=False, device=device, save_mesh=False,
             camera_center=camera_center, img_list=None, add_ground_plane=True, fast_render=True)
 
-        # if args.make_video:
-        #     cmd = 'python utils/images_to_video.py {} {}/full_out_video.mp4'.format(out_render_path, out_folder)
-        #     os.system(cmd)
+        if args.save_video:
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-framerate', str(args.fps),
+                '-i', '{}/frame_%08d.jpg'.format(out_render_path),
+                '-c:v', 'libx264',
+                '-pix_fmt', 'yuv420p',
+                '-crf', '23',
+                '-preset', 'veryslow',
+                '{}/video.mp4'.format(out_folder)
+            ]
+            cmd = ' '.join(cmd)
+            print(cmd)
+            os.system(cmd)
 
 
 if __name__ == '__main__':

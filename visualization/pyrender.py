@@ -67,7 +67,7 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
     if img_list is not None:
         img_names = img_list  # only render images in the given list
     
-    for img_name in tqdm(img_names):
+    for img_name in tqdm(img_names, desc='Rendering'):
         cam_vfov, cam_pitch, cam_roll, cam_focal_length = cam_params
         # cam_vfov, cam_pitch, cam_roll, cam_focal_length = 0.4688836932182312, 0.21909338235855103, -0.005275309085845947, 1060.
         cam_params = np.array([cam_vfov, cam_pitch, cam_roll, cam_focal_length])

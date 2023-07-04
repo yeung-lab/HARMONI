@@ -66,14 +66,12 @@ Optional args:
 
 Output folder structure
 ```bash
-- detections
-    - keypoints
-    - depth
-- rendered
-- tracking_info.pkl
+- openpose
+- sampled_tracks
+- render
 - results.pkl
 - dataset.pkl
-- result.mp4
+- result.mp4  # if --save_video
 ```
 
 ## Related Resources
