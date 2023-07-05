@@ -19,6 +19,7 @@ Later
 Dependencies
 - ffmpeg
 
+Install conda environment.
 ```bash
 ./install.sh
 ```
@@ -75,4 +76,5 @@ Output folder structure
 
 ## Related Resources
 We borrowed code from the below amazing resources:
-ControlNet for openpose and midas api.
+- [ControlNet](https://github.com/lllyasviel/ControlNet) for OpenPose and MiDaS api.
+- [PARE](https://github.com/mkocabas/PARE) for HMR-related helpers.

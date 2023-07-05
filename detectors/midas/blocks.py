@@ -121,7 +121,7 @@ class Interpolate(nn.Module):
     """Interpolation module.
     """
 
-    def __init__(self, scale_factor, mode, align_corners=False):
+    def __init__(self, scale_factor, mode):
         """Init.
 
         Args:
@@ -133,7 +133,6 @@ class Interpolate(nn.Module):
         self.interp = nn.functional.interpolate
         self.scale_factor = scale_factor
         self.mode = mode
-        self.align_corners = align_corners
 
     def forward(self, x):
         """Forward pass.
@@ -146,7 +145,7 @@ class Interpolate(nn.Module):
         """
 
         x = self.interp(
-            x, scale_factor=self.scale_factor, mode=self.mode, align_corners=self.align_corners
+            x, scale_factor=self.scale_factor, mode=self.mode, align_corners=False
         )
 
         return x

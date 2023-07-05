@@ -4,3 +4,7 @@ pip install git+https://github.com/nghorbani/configer
 pip install matplotlib opencv-python scikit-image
 pip install loguru termcolor Pillow joblib tqdm configargparse
 pip install smplx==0.1.28 trimesh==3.9.13 pyrender
+
+pip install detectron2
+pip install git+https://github.com/cocodataset/panopticapi.git
+pip install open3d einops timm

@@ -11,6 +11,7 @@ import numpy as np
 
 from detectors.classifier import BodyTypeClassifier
 from detectors.openpose import run_on_images as run_openpose
+
 from utils.img_utils import cropout_openpose_one_third, default_img_transform, crop
 
 
