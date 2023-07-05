@@ -19,9 +19,9 @@ def parse_config(argv=None):
     parser.add_argument('--use_cached_dataset', default=False, action='store_true')
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--camera_focal', type=int, default=2000)
-    parser.add_argument('--tracker_type', type=str, default='phalp')
+    parser.add_argument('--tracker_type', type=str, default='phalp', choices=['phalp', 'dummy'])
 
-    parser.add_argument('--hps', type=str, default='dapa', help='The hps model being used')
+    parser.add_argument('--hps', type=str, default='dapa', choices=['dapa'], help='The hps model being used')
     parser.add_argument('--run_smplify', default=False, action='store_true')
     parser.add_argument('--ground_constraint', default=False, action='store_true')
     parser.add_argument('--smplify_iters', type=int, default=10)

@@ -265,7 +265,7 @@ def render_with_pyrender(
 
         camera_translation[0] *= -1.
         camera_translation[2] *= cam_dist_scalar
-        ground_translation = np.array([0, -ground_y, 4])
+        ground_translation = np.array([0, -ground_y, 10])
         ground_translation[2] *= cam_dist_scalar
 
         mesh = trimesh.Trimesh(vertices_, faces_, process=False)

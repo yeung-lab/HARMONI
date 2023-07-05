@@ -5,7 +5,7 @@
 ## Dev plan
 Priority
 - [x] Without preprocessing. Get the hps and visualization code working.
-- Get refinement with 2D keypoints working.
+- [x] Get refinement with 2D keypoints working.
 - Get ground plane constraint working.
 - Add preprocessing: tracking.
 - Add interactive correction.

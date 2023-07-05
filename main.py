@@ -86,7 +86,15 @@ def main(args):
         os.makedirs(out_render_path)
 
     if args.run_smplify:
-        smplify_runner = SMPLifyRunner(args)
+        from postprocess.temporal_smplify import TemporalSMPLify
+        smplify_runner = TemporalSMPLify(
+            step_size=1e-2,
+            num_iters=args.smplify_iters,
+            focal_length=cam_focal_length,
+            use_lbfgs=True,
+            device=torch.device('cuda'),
+            max_iter=20
+        )
     else:
         smplify_runner = None
     
@@ -202,119 +210,129 @@ def main(args):
             if not args.run_smplify:
                 # parse results
                 results_by_img_name, results_batch = collect_results_for_image_dapa(
-                    pred_pose, pred_betas, pred_camera, batch, cam_focal_length, orig_img_width, orig_img_height)
+                    pred_pose, pred_betas, pred_camera, None, batch, cam_focal_length, orig_img_width, orig_img_height)
                 # update results in this batch
                 results_holder.update_results(batch['idx'].numpy(), results_batch)
-                # for each unique image in this batch, render and save rendered image to disk
-                # for img_name, res in results_by_img_name.items():
-                #     render_image_dapa(res[0], os.path.join(images_folder, img_name), out_render_path, cam_focal_length)
-            
             else:
+                model_type = 'smil' if body_type == 'infant' else 'smpl'
+
+                smplify_results, reproj_loss = smplify_runner(model_type, init_global_orient, init_pose, init_betas, init_transl, 
+                                                              camera_center, batch['keypoints'])
+                refined_thetas = smplify_results['theta']
+                refined_transl = refined_thetas[:, :3]
+                refined_pose = refined_thetas[:, 3:-10]
+                refined_betas = refined_thetas[:, -10:]
+                
+                results_by_img_name, results_batch = collect_results_for_image_dapa(
+                    refined_pose, refined_betas, pred_camera, refined_transl, batch, cam_focal_length, orig_img_width, orig_img_height)
+
+                results_holder.update_results(batch['idx'].numpy(), results_batch)
+
                 # TODO (Jen): implement later.
                 #################################################
                 # fill in empty kp2d for PHALP ghost detections #
                 #################################################
-                is_ghost = batch['is_ghost'].numpy()
-                ghost_idxs = np.where(is_ghost)[0]
+                # is_ghost = batch['is_ghost'].numpy()
+                # ghost_idxs = np.where(is_ghost)[0]
 
-                for ghost_idx in ghost_idxs:
-                    if ghost_idx == 0:
-                        batch['keypoints'][0] = batch['keypoints'][np.where(~is_ghost)[0][0]]
-                        batch['yhxw'][0] = batch['yhxw'][np.where(~is_ghost)[0][0]]
+                # for ghost_idx in ghost_idxs:
+                #     if ghost_idx == 0:
+                #         batch['keypoints'][0] = batch['keypoints'][np.where(~is_ghost)[0][0]]
+                #         batch['yhxw'][0] = batch['yhxw'][np.where(~is_ghost)[0][0]]
                     
-                    batch['keypoints'][ghost_idx] = batch['keypoints'][ghost_idx-1]
-                    batch['yhxw'][ghost_idx] = batch['yhxw'][ghost_idx-1]
+                #     batch['keypoints'][ghost_idx] = batch['keypoints'][ghost_idx-1]
+                #     batch['yhxw'][ghost_idx] = batch['yhxw'][ghost_idx-1]
              
-                # Fit the body models for this batch
-                if body_type == 'infant':
-                    bm = hps.init_body_model(cfg.smil_model_path, batch_size=cur_batch_size, create_body_pose=create_body_pose)
-                    bm_single = hps.init_body_model(cfg.smil_model_path, batch_size=1, create_body_pose=create_body_pose)
-                else:
-                    bm = hps.init_body_model(cfg.smpl_model_path, batch_size=cur_batch_size, create_body_pose=create_body_pose)
-                    bm_single = hps.init_body_model(cfg.smpl_model_path, batch_size=1, create_body_pose=create_body_pose)
-                    init_pose = init_pose[:, :63]
+                # # Fit the body models for this batch
+                # if body_type == 'infant':
+                #     bm = hps.init_body_model(cfg.smil_model_path, batch_size=cur_batch_size, create_body_pose=create_body_pose)
+                #     bm_single = hps.init_body_model(cfg.smil_model_path, batch_size=1, create_body_pose=create_body_pose)
+                # else:
+                #     bm = hps.init_body_model(cfg.smpl_model_path, batch_size=cur_batch_size, create_body_pose=create_body_pose)
+                #     bm_single = hps.init_body_model(cfg.smpl_model_path, batch_size=1, create_body_pose=create_body_pose)
+                #     init_pose = init_pose[:, :63]
     
-                model_type = 'smil' if body_type == 'infant' else 'smpl'
-                verts = faces = qp_sdfs = vmin = vmax = cam_R = ground_y = None
-                grid_dim = 8
-                results = smplify_runner.fit(batch, bm, args.smplify_iters, model_type, 
-                            init_betas, init_global_orient, init_pose, init_transl,
-                            verts, faces, qp_sdfs, vmin, vmax, grid_dim, cam_R, ground_y, normal_vec, 
-                            spec_focal=cam_focal_length, spec_camrot=cam_rotmat.cuda())
-                results_holder.update_results(batch['idx'].numpy(), results)
+                
+                # verts = faces = qp_sdfs = vmin = vmax = cam_R = ground_y = None
+                # grid_dim = 8
+                # results = smplify_runner.fit(batch, bm, args.smplify_iters, model_type, 
+                #             init_betas, init_global_orient, init_pose, init_transl,
+                #             verts, faces, qp_sdfs, vmin, vmax, grid_dim, cam_R, ground_y, normal_vec, 
+                #             spec_focal=cam_focal_length, spec_camrot=cam_rotmat.cuda())
+                # results_holder.update_results(batch['idx'].numpy(), results)
 
                 # Humans in this batch come from different images. Clean up results by 
                 # mapping each image to the fittings from that image.
-                body_verts = get_body_vertices_batched(bm_single, results, convert=False, transl_body=False)
-                body_verts_with_transl = get_body_vertices_batched(bm_single, results, convert=False, transl_body=True)
+                # body_verts = get_body_vertices_batched(bm_single, results, convert=False, transl_body=False)
+                # body_verts_with_transl = get_body_vertices_batched(bm_single, results, convert=False, transl_body=True)
                 
-                results_by_img_name = dict()
-                for img_name in set(batch['img_name']):
-                    idx = np.where(np.array(batch['img_name'])==img_name)[0]
-                    # assert len(idx) == 1, batch['img_name']
-                    results_by_img_name[img_name] = [
-                        [body_verts[i] for i in idx],
-                        [body_verts_with_transl[i] for i in idx],
-                        [bm_single.faces for i in idx],
-                        [batch['keypoints'][i][:25].numpy() for i in idx],
-                        [init_transl[i] for i in idx],
-                        [results[i]['transl'] for i in idx],
-                        [results[i]['joints'][0, :25] for i in idx],
-                    ]
+                # results_by_img_name = dict()
+                # for img_name in set(batch['img_name']):
+                #     idx = np.where(np.array(batch['img_name'])==img_name)[0]
+                #     # assert len(idx) == 1, batch['img_name']
+                #     results_by_img_name[img_name] = [
+                #         [body_verts[i] for i in idx],
+                #         [body_verts_with_transl[i] for i in idx],
+                #         [bm_single.faces for i in idx],
+                #         [batch['keypoints'][i][:25].numpy() for i in idx],
+                #         [init_transl[i] for i in idx],
+                #         [results[i]['transl'] for i in idx],
+                #         [results[i]['joints'][0, :25] for i in idx],
+                #     ]
                 
-                for idx_, (img_name, res) in enumerate(results_by_img_name.items()):
+                # for idx_, (img_name, res) in enumerate(results_by_img_name.items()):
 
-                    vertices, vertices_with_transl, faces, keypoints_2d, transl, joints = res[0][0], res[1][0], res[2][0], res[3][0], res[5][0].flatten(), res[6][0]
+                #     vertices, vertices_with_transl, faces, keypoints_2d, transl, joints = res[0][0], res[1][0], res[2][0], res[3][0], res[5][0].flatten(), res[6][0]
                 
-                    # project the left/right ankles onto the normal_vec (unit-norm)
-                    left_ankle_projection = np.dot(joints[11], normal_vec.cpu().numpy())
-                    right_ankle_projection = np.dot(joints[14], normal_vec.cpu().numpy())
-                    results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
+                #     # project the left/right ankles onto the normal_vec (unit-norm)
+                #     left_ankle_projection = np.dot(joints[11], normal_vec.cpu().numpy())
+                #     right_ankle_projection = np.dot(joints[14], normal_vec.cpu().numpy())
+                #     results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
        
-                    if refine_with_ground:
-                        mesh_color = 'green' if body_type == 'adult' else 'blue'
-                        if keypoints_2d[:,2].sum() > 9: 
-                            mesh_color = 'dark_'+mesh_color
-                        elif keypoints_2d[:,2].sum() < 5:
-                            mesh_color = 'light_'+mesh_color
-                        save_filename = os.path.join(out_render_path, img_name)
+                #     if refine_with_ground:
+                #         mesh_color = 'green' if body_type == 'adult' else 'blue'
+                #         if keypoints_2d[:,2].sum() > 9: 
+                #             mesh_color = 'dark_'+mesh_color
+                #         elif keypoints_2d[:,2].sum() < 5:
+                #             mesh_color = 'light_'+mesh_color
+                #         save_filename = os.path.join(out_render_path, img_name)
                         
-                        if idx_ == 0:  # no need to render all frames. this will be done at the end by function render_with_ground
-                            render_image_group(
-                                os.path.join(images_folder, img_name), transl, vertices, render_rotmat, 
-                                focal_lengths, camera_center,
-                                faces=faces, cam_params=cam_params, keypoints_2d=keypoints_2d, save_filename=save_filename,
-                                ground_y=ground_y,
-                                mesh_color=mesh_color, fast_render=True)
+                #         if idx_ == 0:  # no need to render all frames. this will be done at the end by function render_with_ground
+                #             render_image_group(
+                #                 os.path.join(images_folder, img_name), transl, vertices, render_rotmat, 
+                #                 focal_lengths, camera_center,
+                #                 faces=faces, cam_params=cam_params, keypoints_2d=keypoints_2d, save_filename=save_filename,
+                #                 ground_y=ground_y,
+                #                 mesh_color=mesh_color, fast_render=True)
 
     #################################################
     # Postprocessing: smoothing to remove jittering #
     #################################################
-    if args.run_smplify:
-        # Smoothing using OneEuroFilter (as in SPIN).
-        for track_id, pidxs in dataset.track_to_id.items():
-            logger.info('Smoothing track {}'.format(track_id))
-            pred_pose = np.stack([results_holder.results[i]['body_pose'][0] for i in pidxs])
-            pred_orient = np.stack([results_holder.results[i]['global_orient'][0] for i in pidxs])
-            pred_transl = np.stack([results_holder.results[i]['transl'][0] for i in pidxs])
+    # if args.run_smplify:
+    #     # Smoothing using OneEuroFilter (as in SPIN).
+    #     for track_id, pidxs in dataset.track_to_id.items():
+    #         logger.info('Smoothing track {}'.format(track_id))
+    #         pred_pose = np.stack([results_holder.results[i]['body_pose'][0] for i in pidxs])
+    #         pred_orient = np.stack([results_holder.results[i]['global_orient'][0] for i in pidxs])
+    #         pred_transl = np.stack([results_holder.results[i]['transl'][0] for i in pidxs])
 
-            pose_filter = OneEuroFilter(np.zeros_like(pred_pose[0]), pred_pose[0], min_cutoff=0.004, beta=0.7)
-            orient_filter = OneEuroFilter(np.zeros_like(pred_orient[0]), pred_orient[0], min_cutoff=0.004, beta=0.7)
-            transl_filter = OneEuroFilter(np.zeros_like(pred_transl[0]), pred_transl[0], min_cutoff=0.004, beta=0.7)
-            for i, pose in enumerate(pred_pose[1:]):
-                i += 1
-                pose = pose_filter(np.ones_like(pose) * i, pose)
-                orient = orient_filter(np.ones_like(pred_orient[i]) * i, pred_orient[i])
-                transl = transl_filter(np.ones_like(pred_transl[i]) * i, pred_transl[i])
-                pred_pose[i] = pose
-                pred_orient[i] = orient
-                pred_transl[i] = transl
+    #         pose_filter = OneEuroFilter(np.zeros_like(pred_pose[0]), pred_pose[0], min_cutoff=0.004, beta=0.7)
+    #         orient_filter = OneEuroFilter(np.zeros_like(pred_orient[0]), pred_orient[0], min_cutoff=0.004, beta=0.7)
+    #         transl_filter = OneEuroFilter(np.zeros_like(pred_transl[0]), pred_transl[0], min_cutoff=0.004, beta=0.7)
+    #         for i, pose in enumerate(pred_pose[1:]):
+    #             i += 1
+    #             pose = pose_filter(np.ones_like(pose) * i, pose)
+    #             orient = orient_filter(np.ones_like(pred_orient[i]) * i, pred_orient[i])
+    #             transl = transl_filter(np.ones_like(pred_transl[i]) * i, pred_transl[i])
+    #             pred_pose[i] = pose
+    #             pred_orient[i] = orient
+    #             pred_transl[i] = transl
 
-            for i, idx in enumerate(pidxs):
-                results_holder.results_smoothed[idx] = results_holder.results[idx]
-                results_holder.results_smoothed[idx]['body_pose'] = pred_pose[i].reshape(1, -1)
-                results_holder.results_smoothed[idx]['global_orient'] = pred_orient[i].reshape(1, -1)
-                results_holder.results_smoothed[idx]['transl'] = pred_transl[i].reshape(1, -1)
+    #         for i, idx in enumerate(pidxs):
+    #             results_holder.results_smoothed[idx] = results_holder.results[idx]
+    #             results_holder.results_smoothed[idx]['body_pose'] = pred_pose[i].reshape(1, -1)
+    #             results_holder.results_smoothed[idx]['global_orient'] = pred_orient[i].reshape(1, -1)
+    #             results_holder.results_smoothed[idx]['transl'] = pred_transl[i].reshape(1, -1)
     
     logger.info('Saving '+ os.path.join(out_folder, 'results.pt'))
     joblib.dump(results_holder, os.path.join(out_folder, 'results.pt'))

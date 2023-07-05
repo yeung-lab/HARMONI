@@ -65,10 +65,8 @@ def get_result(pred_pose, pred_betas, pred_cam, body_type, x, y, h, target_focal
     verts = bm.vertices.detach()[0].detach().cpu().numpy()
 
     trans = get_original(pred_cam[0].detach().cpu().numpy(), x.item(), y.item(), h.item(), target_focal, orig_img_width, orig_img_height)
-    # print(trans)
-    verts_shifted = verts + trans
-    joints_shifted = joints + trans
-    return verts_shifted, joints_shifted, trans
+
+    return verts, joints, trans
 
 
 def render_image_dapa(verts, img_path, out_image_path, target_focal, orig_img_width, orig_img_height, save=True):
@@ -89,10 +87,11 @@ def render_image_dapa(verts, img_path, out_image_path, target_focal, orig_img_wi
     return pimg
 
 
-def collect_results_for_image_dapa(pred_pose, pred_betas, pred_cam, batch, target_focal, orig_img_width, orig_img_height):
+def collect_results_for_image_dapa(pred_pose, pred_betas, pred_cam, pred_transl, batch, target_focal, orig_img_width, orig_img_height):
     pred_pose = pred_pose.detach()
     pred_betas = pred_betas.detach()
-    pred_cam = pred_cam.detach()
+    if pred_cam is not None:
+        pred_cam = pred_cam.detach()
     img_names = np.sort(np.unique(batch['img_name']))
     verts_results = dict()
     yhxw = batch['yhxw'].cpu().numpy()
@@ -107,6 +106,8 @@ def collect_results_for_image_dapa(pred_pose, pred_betas, pred_cam, batch, targe
             verts, joints, trans = get_result(
                 pred_pose[i], pred_betas[i], pred_cam[i], body_types[i], yhxw[i,2], yhxw[i,0], yhxw[i,1], target_focal,
                 orig_img_width, orig_img_height)
+            if pred_transl is not None:
+                trans = pred_transl[i].detach().cpu().numpy()
             verts_results[img_name].append(verts)
             assert results_batch[i] is None
             results_batch[i] = {
