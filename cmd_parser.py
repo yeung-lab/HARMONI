@@ -27,9 +27,9 @@ def parse_config(argv=None):
     parser.add_argument('--smplify_iters', type=int, default=10)
 
     parser.add_argument('--render', default=False, action='store_true')
-    parser.add_argument('--side_view', default=False, action='store_true')
     parser.add_argument('--top_view', default=False, action='store_true')
     parser.add_argument('--save_video', default=False, action='store_true')
+    parser.add_argument('--save_mesh', default=False, action='store_true')
     
     if argv:
         args = parser.parse_args(args=argv.split(' '))

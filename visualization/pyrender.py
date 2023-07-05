@@ -13,36 +13,14 @@ import pyrender
 
 from hps.body_model import init_body_model
 from utils.geometry import batch_euler2matrix
-
-
-
-def get_colors():
-    colors = {
-        'pink': np.array([197, 27, 125]),  # L lower leg
-        'light_pink': np.array([233, 163, 201]),  # L upper leg
-        'light_green': np.array([161, 215, 106]),  # L lower arm
-        'green': np.array([77, 146, 33]),  # L upper arm
-        'red': np.array([215, 48, 39]),  # head
-        'light_red': np.array([252, 146, 114]),  # head
-        'light_orange': np.array([252, 141, 89]),  # chest
-        'purple': np.array([118, 42, 131]),  # R lower leg
-        'light_purple': np.array([175, 141, 195]),  # R upper
-        'light_blue': np.array([145, 191, 219]),  # R lower arm
-        'blue': np.array([69, 117, 180]),  # R upper arm
-        'gray': np.array([130, 130, 130]),  #
-        'white': np.array([255, 255, 255]),  #
-        'pinkish': np.array([204, 77, 77]),
-        'dark_blue': np.array((69,117,255)),
-        'dark_green': np.array((21,89,5)),
-    }
-    return colors
+from visualization.utils import get_colors, get_checkerboard_plane
 
 colors = get_colors()
 
 
 def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
            camera_center=np.array([960, 540]), img_list=None, fast_render=True, label_str=[''], use_smoothed=False,
-           ground_y= -1.0, add_ground_plane=False):
+           ground_y= -1.0, add_ground_plane=False, top_view=False):
     """Generate meshes from the saved estimated SMPL parameters, and then render.
     """
     adult_bm = init_body_model(cfg.smpl_model_path, batch_size=1, create_body_pose=True).to(device)
@@ -137,16 +115,20 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
             track_ids.append(dataset.id_to_track[person_id])
         
         save_filename = os.path.join(save_folder, img_name)
-        save_mesh = False
         if save_mesh:
-            mesh_filename = os.path.join(save_folder, os.path.splitext(img_name)[0]+f'_{person_id}.obj')
+            save_mesh_folder = os.path.join(save_folder, 'meshes')
+            if not os.path.exists(save_mesh_folder):
+                os.makedirs(save_mesh_folder)
+
+            mesh_filename = os.path.join(save_mesh_folder, os.path.splitext(img_name)[0]+f'_{person_id}.obj')
         else:
             mesh_filename = None
         
         render_image_group(
             os.path.join(img_path, img_name), camera_translations, vertices, render_rotmat.numpy(), focal_lengths, camera_center,
             faces=faces, cam_params=cam_params, keypoints_2d=keypoints_2d, track_ids=track_ids, save_filename=save_filename, ground_y=ground_y,
-            mesh_color=mesh_colors, desc=desc, mesh_filename=mesh_filename, fast_render=fast_render, add_ground_plane=add_ground_plane)
+            mesh_color=mesh_colors, desc=desc, mesh_filename=mesh_filename, fast_render=fast_render, add_ground_plane=add_ground_plane,
+            top_view=top_view)
 
 
 def render_image_group(
@@ -165,13 +147,14 @@ def render_image_group(
         track_ids = None,
         cam_params= None,
         ground_y= -1.0,
-        desc=[], fast_render=True, add_ground_plane=False
+        desc=[], fast_render=True, add_ground_plane=False,
+        top_view=False
 ):
     to_numpy = lambda x: x.detach().cpu().numpy()
     try:
         image = cv2.imread(image_fn)[:,:,::-1]
     except:
-        print(image_fn)
+        print(image_fn, 'does not exist')
         sys.exit(0)
         
     if np.max(image) > 10:
@@ -185,21 +168,33 @@ def render_image_group(
     #         image = draw_skeleton(image, kp_2d=keypoints_2d, dataset='openpose', unnormalize=False)
 
     # input image to this step should be between [0,1]
-    front_img, ground_y = render_overlay_image_multiperson(
-        image=np.zeros_like(image),
-        camera_translations=camera_translation,
-        vertices=vertices,
-        camera_rotation=camera_rotation,
-        focal_length=focal_length,
-        camera_center=camera_center,
-        mesh_colors=mesh_color,
-        alpha=alpha,
-        faces=faces,
-        mesh_filename=mesh_filename,
-        sideview_angle=0,
-        ground_y=ground_y, fast_render=fast_render, add_ground_plane=add_ground_plane
-    )
-    output_img = np.concatenate([image, front_img], axis=1)
+    view_rots = [np.eye(3)]
+    cam_dist_scalars = [1.0]
+    if top_view:
+        view_rot = trimesh.transformations.rotation_matrix(
+                        np.radians(45), [1, 0, 0])
+        view_rots.append(view_rot[:3, :3])
+        cam_dist_scalars.append(2.0)
+
+    rendered_images = []
+    for view_rot, cam_dist_scalar in zip(view_rots, cam_dist_scalars):
+        rendered_img, ground_y = render_with_pyrender(
+            image=np.zeros_like(image),
+            camera_translations=camera_translation,
+            vertices=vertices,
+            camera_rotation=camera_rotation,
+            focal_length=focal_length,
+            camera_center=camera_center,
+            mesh_colors=mesh_color,
+            alpha=alpha,
+            faces=faces,
+            mesh_filename=mesh_filename,
+            view_rot=view_rot,
+            cam_dist_scalar=cam_dist_scalar,
+            ground_y=ground_y, fast_render=fast_render, add_ground_plane=add_ground_plane
+        )
+        rendered_images.append(rendered_img)
+    output_img = np.concatenate([image, *rendered_images], axis=1)
 
     if save_filename is not None:
         images_save = output_img * 255
@@ -229,33 +224,7 @@ def render_image_group(
     return output_img
 
 
-def get_checkerboard_plane(plane_width=4, num_boxes=9, center=True):
-
-    pw = plane_width / num_boxes
-    white = [220, 220, 220, 255]
-    black = [35, 35, 35, 255]
-
-    meshes = []
-    for i in range(num_boxes):
-        for j in range(num_boxes):
-            c = i * pw, j * pw
-            ground = trimesh.primitives.Box(
-                center=[0, 0, -0.0001],
-                extents=[pw, pw, 0.0002]
-            )
-
-            if center:
-                c = c[0]+(pw/2)-(plane_width/2), c[1]+(pw/2)-(plane_width/2)
-            # trans = trimesh.transformations.scale_and_translate(scale=1, translate=[c[0], c[1], 0])
-            ground.apply_translation([c[0], c[1], 0])
-            # ground.apply_transform(trimesh.transformations.rotation_matrix(np.rad2deg(-120), direction=[1,0,0]))
-            ground.visual.face_colors = black if ((i+j) % 2) == 0 else white
-            meshes.append(ground)
-
-    return meshes
-
-
-def render_overlay_image_multiperson(
+def render_with_pyrender(
         image: np.ndarray,
         camera_translations: list,
         vertices: list,
@@ -265,7 +234,8 @@ def render_overlay_image_multiperson(
         mesh_colors: list,
         alpha: float = 1.0,
         faces: list = None,
-        sideview_angle: int = 0,
+        view_rot: np.ndarray = None,
+        cam_dist_scalar: float = 1.0,
         mesh_filename: str = None,
         add_ground_plane: bool = True,
         ground_y: float = -1.0,
@@ -277,7 +247,7 @@ def render_overlay_image_multiperson(
 
     for idx in range(num_persons):
         mesh_color = mesh_colors[idx]
-        camera_translation = camera_translations[idx]
+        camera_translation = camera_translations[idx].copy()
         vertices_ = vertices[idx]
         faces_ = faces[idx]
 
@@ -288,17 +258,15 @@ def render_overlay_image_multiperson(
             baseColorFactor=(mesh_color[0] / 255., mesh_color[1] / 255., mesh_color[2] / 255., alpha))
 
         camera_translation[0] *= -1.
+        camera_translation *= cam_dist_scalar
 
         mesh = trimesh.Trimesh(vertices_, faces_, process=False)
         rot = trimesh.transformations.rotation_matrix(
             np.radians(180), [1, 0, 0])  # invert y and z axis
+
+        rot[:3, :3] = rot[:3, :3] @ view_rot
         rot[:3, 3] = - camera_rotation @ camera_translation
         mesh.apply_transform(rot)
-
-        if sideview_angle > 0:
-            rot = trimesh.transformations.rotation_matrix(
-                np.radians(sideview_angle), [0, 1, 0])
-            mesh.apply_transform(rot)
 
         if mesh_filename:
             mesh_filename_wo_ext, ext = os.path.splitext(mesh_filename)
@@ -307,19 +275,19 @@ def render_overlay_image_multiperson(
             #     np.save(mesh_filename.replace('.obj', '.npy'), camera_translation)
 
         mesh = pyrender.Mesh.from_trimesh(mesh, material=material)
-        
         scene.add(mesh, 'mesh'+str(idx))
 
     if add_ground_plane:
         ground_trimesh = get_checkerboard_plane(plane_width=8)
         pose = trimesh.transformations.rotation_matrix(np.radians(90), [1, 0, 0])  # (x,y,z) -> (x,-z,y)
-        pose[:3, 3] = - camera_rotation @ camera_translation
+        pose[:3, :3] = pose[:3, :3] @ view_rot
+        pose[:3, 3] = - camera_rotation @ np.array([0, 0, 4.])
         pose[1, 3] = ground_y
         pose[0, 3] = 0
-        # this is equivalent to specifying pose in pyrender scene.add()
+
         for box in ground_trimesh:
             box.apply_transform(pose)
-        
+            
         if mesh_filename:
             combined_ground = trimesh.util.concatenate(ground_trimesh)
             mesh_filename_wo_ext, ext = os.path.splitext(mesh_filename)
@@ -332,6 +300,10 @@ def render_overlay_image_multiperson(
     camera_pose[:3, :3] = camera_rotation
     camera = pyrender.IntrinsicsCamera(fx=focal_length[0], fy=focal_length[1],
                                        cx=camera_center[0], cy=camera_center[1])
+    
+    # if cam_dist_scalar > 1, move the camera a little bit farther so the scene is more clear
+    # camera_pose[:3, 3] *= cam_dist_scalar
+
     scene.add(camera, pose=camera_pose)
 
     light = pyrender.DirectionalLight(color=[1.0, 1.0, 1.0], intensity=1)

@@ -4,10 +4,11 @@
 
 ## Dev plan
 Priority
-- Without preprocessing. Get the hps and visualization code working.
+- [x] Without preprocessing. Get the hps and visualization code working.
 - Get refinement with 2D keypoints working.
 - Get ground plane constraint working.
-- Add preprocessing.
+- Add preprocessing: tracking.
+- Add interactive correction.
 
 Later
 - audio
@@ -15,33 +16,31 @@ Later
 - Double check the license
 
 ## Installation
+Dependencies
+- ffmpeg
+
 ```bash
-conda create -n harmoni python==3.9
-pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
-# conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch
-pip install git+https://github.com/nghorbani/configer
-pip install matplotlib opencv-python scikit-image
-pip install loguru termcolor Pillow joblib tqdm configargparse
-pip install smplx==0.1.28 trimesh==3.9.13 pyrender
-# other dependencies
-ffmpeg
-
+./install.sh
 ```
-
 
 ## Running HARMONI on a sample video
 ```bash
-python main.py --images data/demo/vid --hps dapa --out_folder ./results --render --use_cached_dataset
+python main.py --images data/demo/vid --hps dapa --out_folder ./results --render --use_cached_dataset --top_view
 
 Optional args:
 [--overlay_dyad_stats]
 [--ground_constraint]
-[--side_view]
 [--top_view]
 [--refine_with_kp]
 [--tracker]
 
 ```
+## Compute downstream attributes
+TODO
+
+## Generate plots in the paper
+TODO
+
 
 ## Code structure
 ```bash

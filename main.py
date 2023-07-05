@@ -322,8 +322,10 @@ def main(args):
     if args.render:
         from visualization.pyrender import render
         render(
-            dataset, results_holder, images_folder, out_render_path, cfg, cam_params, skip_if_no_infant=False, device=device, save_mesh=False,
-            camera_center=camera_center, img_list=None, add_ground_plane=True, fast_render=True)
+            dataset, results_holder, images_folder, out_render_path, cfg, cam_params, 
+            skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
+            camera_center=camera_center, img_list=None, 
+            add_ground_plane=True, fast_render=True, top_view=args.top_view)
 
         if args.save_video:
             cmd = [
