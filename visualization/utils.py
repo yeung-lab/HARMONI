@@ -48,3 +48,23 @@ def get_checkerboard_plane(plane_width=4, num_boxes=9, center=True):
             meshes.append(ground)
 
     return meshes
+
+
+def look_at_camera(position, target, up):
+    forward = np.subtract(target, position)
+    forward /= np.linalg.norm(forward)
+
+    right = np.cross(forward, up)
+    right /= np.linalg.norm(right)
+
+    true_up = np.cross(right, forward)
+
+    rotation_matrix = np.array([
+        [right[0], right[1], right[2]],
+        [true_up[0], true_up[1], true_up[2]],
+        [-forward[0], -forward[1], -forward[2]]
+    ])
+
+    translation_vector = -np.dot(rotation_matrix, position)
+
+    return rotation_matrix, translation_vector

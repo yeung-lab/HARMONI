@@ -13,10 +13,11 @@ import pyrender
 
 from hps.body_model import init_body_model
 from utils.geometry import batch_euler2matrix
-from visualization.utils import get_colors, get_checkerboard_plane
+from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera
+from visualization.keypoints import draw_skeleton
+
 
 colors = get_colors()
-
 
 def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
            camera_center=np.array([960, 540]), img_list=None, fast_render=True, label_str=[''], use_smoothed=False,
@@ -150,7 +151,6 @@ def render_image_group(
         desc=[], fast_render=True, add_ground_plane=False,
         top_view=False
 ):
-    to_numpy = lambda x: x.detach().cpu().numpy()
     try:
         image = cv2.imread(image_fn)[:,:,::-1]
     except:
@@ -160,24 +160,30 @@ def render_image_group(
     if np.max(image) > 10:
         image = image / 255.
 
-    # if keypoints_2d is not None:
-    #     if isinstance(keypoints_2d, list):
-    #         for kp_2d in keypoints_2d:
-    #             image = draw_skeleton(image, kp_2d=kp_2d, dataset='openpose', unnormalize=False)
-    #     else:
-    #         image = draw_skeleton(image, kp_2d=keypoints_2d, dataset='openpose', unnormalize=False)
+    if keypoints_2d is not None:
+        for kp_2d in keypoints_2d:
+            image = draw_skeleton(image, kp_2d=kp_2d, dataset='openpose', unnormalize=False)
 
     # input image to this step should be between [0,1]
-    view_rots = [np.eye(3)]
+    camera_poses = [np.eye(4)]
     cam_dist_scalars = [1.0]
     if top_view:
-        view_rot = trimesh.transformations.rotation_matrix(
-                        np.radians(45), [1, 0, 0])
-        view_rots.append(view_rot[:3, :3])
-        cam_dist_scalars.append(1.2)
+        # view_rot = trimesh.transformations.rotation_matrix(
+        #                 np.radians(45), [1, 0, 0])
+        
+        camera_pose = np.eye(4)
+        rotation_matrix, translation_vector = look_at_camera(
+            position=np.array([0, -3, -3]).astype(np.float32),
+            target=np.array([0, 0, -4]).astype(np.float32),
+            up=np.array([0, 1, 0]).astype(np.float32) # not true up, only used for calulating the right vector.
+        )
+        camera_pose[:3, :3] = rotation_matrix
+        camera_pose[:3, 3] = translation_vector
+        camera_poses.append(camera_pose)
+        cam_dist_scalars.append(1.0)
 
     rendered_images = []
-    for view_rot, cam_dist_scalar in zip(view_rots, cam_dist_scalars):
+    for camera_pose, cam_dist_scalar in zip(camera_poses, cam_dist_scalars):
         rendered_img, ground_y = render_with_pyrender(
             image=np.zeros_like(image),
             camera_translations=camera_translation,
@@ -189,7 +195,7 @@ def render_image_group(
             alpha=alpha,
             faces=faces,
             mesh_filename=mesh_filename,
-            view_rot=view_rot,
+            camera_pose=camera_pose,
             cam_dist_scalar=cam_dist_scalar,
             ground_y=ground_y, fast_render=fast_render, add_ground_plane=add_ground_plane
         )
@@ -234,7 +240,7 @@ def render_with_pyrender(
         mesh_colors: list,
         alpha: float = 1.0,
         faces: list = None,
-        view_rot: np.ndarray = None,
+        camera_pose: np.ndarray = None,
         cam_dist_scalar: float = 1.0,
         mesh_filename: str = None,
         add_ground_plane: bool = True,
@@ -259,14 +265,14 @@ def render_with_pyrender(
 
         camera_translation[0] *= -1.
         camera_translation[2] *= cam_dist_scalar
-        ground_translation = np.array([0, 0, 4.])
+        ground_translation = np.array([0, -ground_y, 4])
         ground_translation[2] *= cam_dist_scalar
 
         mesh = trimesh.Trimesh(vertices_, faces_, process=False)
         rot = trimesh.transformations.rotation_matrix(
             np.radians(180), [1, 0, 0])  # invert y and z axis
 
-        rot[:3, :3] = rot[:3, :3] @ view_rot
+        rot[:3, :3] = rot[:3, :3] #@ view_rot
         rot[:3, 3] = - camera_rotation @ camera_translation
         mesh.apply_transform(rot)
 
@@ -282,10 +288,9 @@ def render_with_pyrender(
     if add_ground_plane:
         ground_trimesh = get_checkerboard_plane(plane_width=8)
         pose = trimesh.transformations.rotation_matrix(np.radians(90), [1, 0, 0])  # (x,y,z) -> (x,-z,y)
-        pose[:3, :3] = pose[:3, :3] @ view_rot
+       
+        pose[:3, :3] = pose[:3, :3] #@ view_rot
         pose[:3, 3] = - camera_rotation @ ground_translation
-        pose[1, 3] = ground_y
-        pose[0, 3] = 0
 
         for box in ground_trimesh:
             box.apply_transform(pose)
@@ -298,8 +303,6 @@ def render_with_pyrender(
         ground_mesh = pyrender.Mesh.from_trimesh(ground_trimesh, smooth=False)
         scene.add(ground_mesh, name='ground_plane')
 
-    camera_pose = np.eye(4)
-    camera_pose[:3, :3] = camera_rotation
     camera = pyrender.IntrinsicsCamera(fx=focal_length[0], fy=focal_length[1],
                                        cx=camera_center[0], cy=camera_center[1])
     
