@@ -174,7 +174,7 @@ def render_image_group(
         view_rot = trimesh.transformations.rotation_matrix(
                         np.radians(45), [1, 0, 0])
         view_rots.append(view_rot[:3, :3])
-        cam_dist_scalars.append(2.0)
+        cam_dist_scalars.append(1.2)
 
     rendered_images = []
     for view_rot, cam_dist_scalar in zip(view_rots, cam_dist_scalars):
@@ -258,7 +258,9 @@ def render_with_pyrender(
             baseColorFactor=(mesh_color[0] / 255., mesh_color[1] / 255., mesh_color[2] / 255., alpha))
 
         camera_translation[0] *= -1.
-        camera_translation *= cam_dist_scalar
+        camera_translation[2] *= cam_dist_scalar
+        ground_translation = np.array([0, 0, 4.])
+        ground_translation[2] *= cam_dist_scalar
 
         mesh = trimesh.Trimesh(vertices_, faces_, process=False)
         rot = trimesh.transformations.rotation_matrix(
@@ -281,7 +283,7 @@ def render_with_pyrender(
         ground_trimesh = get_checkerboard_plane(plane_width=8)
         pose = trimesh.transformations.rotation_matrix(np.radians(90), [1, 0, 0])  # (x,y,z) -> (x,-z,y)
         pose[:3, :3] = pose[:3, :3] @ view_rot
-        pose[:3, 3] = - camera_rotation @ np.array([0, 0, 4.])
+        pose[:3, 3] = - camera_rotation @ ground_translation
         pose[1, 3] = ground_y
         pose[0, 3] = 0
 
