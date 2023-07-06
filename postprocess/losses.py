@@ -142,14 +142,10 @@ def loss_ground_plane(anchor, normal, point):
     '''
 
     # take de predicted 3d joints and measure dist to plane w normal
-    median = point
+
     # dot product w normal
-    res = torch.matmul((anchor - median) / torch.norm(anchor - median, 2, -1, keepdim=True), normal[:, None]).sum(1)
-    left_ankles_loss = torch.abs(res)
-    res = torch.matmul((anchor - median) / torch.norm(anchor - median, 2, -1, keepdim=True), normal[:, None]).sum(1)
-    right_ankles_loss = torch.abs(res)
-    gp_loss = left_ankles_loss.sum() + right_ankles_loss.sum()
-    # import pdb; pdb.set_trace()
+    res = torch.matmul((anchor - point) / torch.norm(anchor - point, 2, -1, keepdim=True), normal[:, None]).sum(1)
+    gp_loss = torch.abs(res)
     return gp_loss
 
 
@@ -158,7 +154,7 @@ def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_
                                focal_length=5000, sigma=100, pose_prior_weight=4.78,
                                shape_prior_weight=5, angle_prior_weight=15.2,
                                smooth_2d_weight=0.01, smooth_3d_weight=1.0,
-                               output='sum', ground_y=None, ground_normal=None):
+                               output='sum', ground_y=None, ground_normal=None, ground_weight=100.):
     """
     Loss function for body fitting
     """
@@ -189,11 +185,38 @@ def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_
 
     if ground_y is not None:
         anchor = ground_y[None]
-        ground_loss = loss_ground_plane(anchor, ground_normal, model_joints[:, 11])
-        ground_loss += loss_ground_plane(anchor, ground_normal, model_joints[:, 14])
-        ground_loss *= 100
-        print(total_loss.item(), ground_loss.item())
-        total_loss += ground_loss
+
+        # convert to pyrender's coordinate system. 
+        rot_mtx = torch.tensor([
+            [1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1]
+        ]).float().to(model_joints.device).unsqueeze(0).expand(batch_size, -1, -1)
+        joints_world = model_joints @ rot_mtx - camera_t.unsqueeze(1)
+        
+        # import open3d as o3d
+        # import os
+        # import numpy as np
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(joints_world[0].detach().cpu().numpy())
+        # o3d.io.write_point_cloud(os.path.join('results', "debug_joints.ply"), pcd)
+
+        # starting_point = np.array([0, 0, 0])
+        # sampled_points = np.linspace(starting_point, starting_point + ground_normal.cpu().numpy())
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(sampled_points)
+        # o3d.io.write_point_cloud(os.path.join('results', "ground_normal.ply"), pcd)
+
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(anchor.cpu().numpy())
+        # o3d.io.write_point_cloud(os.path.join('results', "debug_anchor.ply"), pcd)
+        # import pdb; pdb.set_trace()
+        
+        right_ankle_loss = loss_ground_plane(anchor, ground_normal, joints_world[:, 11]) # right ankle
+        left_ankle_loss = loss_ground_plane(anchor, ground_normal, joints_world[:, 14])  # left ankle
+        ground_loss = torch.min(left_ankle_loss, right_ankle_loss)
+        # print(total_loss.item(), ground_loss.item())
+        total_loss += ground_loss * ground_weight
 
     # Smooth 2d joint loss
     joint_conf_diff = joints_conf[1:]

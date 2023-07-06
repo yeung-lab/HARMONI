@@ -11,6 +11,7 @@ from tqdm import tqdm
 import numpy as np
 from loguru import logger
 from torchgeometry import rotation_matrix_to_angle_axis
+import open3d as o3d
 
 from cmd_parser import parse_config
 import constants as cfg
@@ -20,13 +21,7 @@ from results import Results
 from utils.geometry import batch_euler2matrix
 from hps.dapa.dapa_utils import get_original, collect_results_for_image_dapa
 
-# from utils.dapa_utils import collect_results_for_image_dapa, render_image_dapa, get_original
-
-# from render_result import render_with_ground
 # from utils.one_euro_filter import OneEuroFilter
-# from utils.utils import render_image, render_image_group
-# from pose_utils.runner import SMPLifyRunner, get_body_vertices_batched
-
 
 def main(args):
     # convert video to images if necessary
@@ -39,6 +34,9 @@ def main(args):
         images_folder = args.images
     
     out_folder = args.out_folder
+
+    if args.ground_constraint:
+        args.run_smplify = True
 
     if os.path.exists(out_folder):
         logger.warning('Folder ' + out_folder + ' exists. Overwriting it...')
@@ -95,7 +93,8 @@ def main(args):
             focal_length=cam_focal_length,
             use_lbfgs=True,
             device=torch.device('cuda'),
-            max_iter=20
+            max_iter=20, 
+            ground_weight=args.ground_weight
         )
     else:
         smplify_runner = None
@@ -121,7 +120,6 @@ def main(args):
             # compute ankles per scene
             scene_to_mean_floor = {}
             for scene_id, ((scene_start, scene_end), normal_vec) in dataset.ground_normals.items():
-                normal_vec = normal_vec[[0,2,1]] 
                 adult_ankles = [
                     results_holder.adult_bottom[dataset.img_names[frame_id]] 
                     for frame_id in range(scene_start, scene_end) if dataset.img_names[frame_id] in results_holder.adult_bottom
@@ -133,8 +131,7 @@ def main(args):
                 mean = np.mean(ankle_projections)
                 std = np.std(ankle_projections)
                 mean_floor = np.mean(ankle_projections[np.abs(ankle_projections - mean) < std])  # filter out the outliers
-                mean_floor = mean_floor * normal_vec  # location of the anchor ankle.
-                scene_to_mean_floor[scene_id] = mean_floor
+                scene_to_mean_floor[scene_id] = mean_floor * normal_vec[[0,2,1]]  # location of the anchor ankle.
         
         pidxs = dataset.track_to_id[track_id]
         body_type = dataset.track_body_types[track_id][0]
@@ -146,16 +143,16 @@ def main(args):
             batch = dataloader.collate_fn([dataset[i] for i in batch_pidxs])
 
             # image_id = int(os.path.splitext(batch['img_name'][0])[0].strip('frame_'))
-            start_image_id = batch['idx'].item()
+            start_image_id = dataset.img_to_img_id[batch['img_name'][0]]
 
             ####################################
             # initialize pose, shape with DAPA #
             ####################################
             if args.ground_constraint:
                 # load ground normal, and set cam_rotmat to be identity matrix
-                for scene_id, (scene_rng, normal_vec) in dataset.ground_normals.items():
+                for scene_id, (scene_rng, normal_vec_) in dataset.ground_normals.items():
                     if start_image_id >= scene_rng[0] and start_image_id <= scene_rng[1]:
-                        normal_vec = normal_vec[[0,2,1]]  # swap y and z
+                        normal_vec = normal_vec_[[0,2,1]].copy()  # swap y and z
                         break
             
                 if refine_with_ground:
@@ -226,88 +223,34 @@ def main(args):
                 for idx_, res in enumerate(results_batch):
                     img_name = res['img_name']
                     joints = res['joints']
+                    # rot_mtx = trimesh.transformations.rotation_matrix(np.radians(180), [1, 0, 0])
+                    rot_mtx = np.array([
+                        [1, 0, 0],
+                        [0, -1, 0],
+                        [0, 0, -1]
+                    ])[np.newaxis, :, :]
+                    joints = joints @ rot_mtx - res['transl'][:, np.newaxis]
+
                     # project the left/right ankles onto the normal_vec (unit-norm)
-                    left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())
+                    left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())  # multiplying by normal_vec is done later.
                     right_ankle_projection = np.dot(joints[0, 14], normal_vec.cpu().numpy())
                     results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
-       
-
-                # TODO (Jen): implement later.
-                #################################################
-                # fill in empty kp2d for PHALP ghost detections #
-                #################################################
-                # is_ghost = batch['is_ghost'].numpy()
-                # ghost_idxs = np.where(is_ghost)[0]
-
-                # for ghost_idx in ghost_idxs:
-                #     if ghost_idx == 0:
-                #         batch['keypoints'][0] = batch['keypoints'][np.where(~is_ghost)[0][0]]
-                #         batch['yhxw'][0] = batch['yhxw'][np.where(~is_ghost)[0][0]]
                     
-                #     batch['keypoints'][ghost_idx] = batch['keypoints'][ghost_idx-1]
-                #     batch['yhxw'][ghost_idx] = batch['yhxw'][ghost_idx-1]
-             
-                # # Fit the body models for this batch
-                # if body_type == 'infant':
-                #     bm = hps.init_body_model(cfg.smil_model_path, batch_size=cur_batch_size, create_body_pose=create_body_pose)
-                #     bm_single = hps.init_body_model(cfg.smil_model_path, batch_size=1, create_body_pose=create_body_pose)
-                # else:
-                #     bm = hps.init_body_model(cfg.smpl_model_path, batch_size=cur_batch_size, create_body_pose=create_body_pose)
-                #     bm_single = hps.init_body_model(cfg.smpl_model_path, batch_size=1, create_body_pose=create_body_pose)
-                #     init_pose = init_pose[:, :63]
-    
-                
-                # verts = faces = qp_sdfs = vmin = vmax = cam_R = ground_y = None
-                # grid_dim = 8
-                # results = smplify_runner.fit(batch, bm, args.smplify_iters, model_type, 
-                #             init_betas, init_global_orient, init_pose, init_transl,
-                #             verts, faces, qp_sdfs, vmin, vmax, grid_dim, cam_R, ground_y, normal_vec, 
-                #             spec_focal=cam_focal_length, spec_camrot=cam_rotmat.cuda())
-                # results_holder.update_results(batch['idx'].numpy(), results)
+                    # pcd = o3d.geometry.PointCloud()
+                    # pcd.points = o3d.utility.Vector3dVector(joints[0])
+                    # o3d.io.write_point_cloud(os.path.join(out_folder, 
+                    #                                       f"{os.path.splitext(img_name)[0]}_{body_type}_joints.ply"), pcd)
+                    
+                    # if ground_y is not None:
+                    #     starting_point = np.array([0, 0, 0])
+                    #     sampled_points = np.linspace(starting_point, starting_point + normal_vec.cpu().numpy())
+                    #     pcd = o3d.geometry.PointCloud()
+                    #     pcd.points = o3d.utility.Vector3dVector(sampled_points)
+                    #     o3d.io.write_point_cloud(os.path.join('results', f"{os.path.splitext(img_name)[0]}_{body_type}_ground_normal.ply"), pcd)
 
-                # Humans in this batch come from different images. Clean up results by 
-                # mapping each image to the fittings from that image.
-                # body_verts = get_body_vertices_batched(bm_single, results, convert=False, transl_body=False)
-                # body_verts_with_transl = get_body_vertices_batched(bm_single, results, convert=False, transl_body=True)
-                
-                # results_by_img_name = dict()
-                # for img_name in set(batch['img_name']):
-                #     idx = np.where(np.array(batch['img_name'])==img_name)[0]
-                #     # assert len(idx) == 1, batch['img_name']
-                #     results_by_img_name[img_name] = [
-                #         [body_verts[i] for i in idx],
-                #         [body_verts_with_transl[i] for i in idx],
-                #         [bm_single.faces for i in idx],
-                #         [batch['keypoints'][i][:25].numpy() for i in idx],
-                #         [init_transl[i] for i in idx],
-                #         [results[i]['transl'] for i in idx],
-                #         [results[i]['joints'][0, :25] for i in idx],
-                #     ]
-                
-                # for idx_, (img_name, res) in enumerate(results_by_img_name.items()):
-
-                #     vertices, vertices_with_transl, faces, keypoints_2d, transl, joints = res[0][0], res[1][0], res[2][0], res[3][0], res[5][0].flatten(), res[6][0]
-                
-                #     # project the left/right ankles onto the normal_vec (unit-norm)
-                #     left_ankle_projection = np.dot(joints[11], normal_vec.cpu().numpy())
-                #     right_ankle_projection = np.dot(joints[14], normal_vec.cpu().numpy())
-                #     results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
-       
-                #     if refine_with_ground:
-                #         mesh_color = 'green' if body_type == 'adult' else 'blue'
-                #         if keypoints_2d[:,2].sum() > 9: 
-                #             mesh_color = 'dark_'+mesh_color
-                #         elif keypoints_2d[:,2].sum() < 5:
-                #             mesh_color = 'light_'+mesh_color
-                #         save_filename = os.path.join(out_render_path, img_name)
-                        
-                #         if idx_ == 0:  # no need to render all frames. this will be done at the end by function render_with_ground
-                #             render_image_group(
-                #                 os.path.join(images_folder, img_name), transl, vertices, render_rotmat, 
-                #                 focal_lengths, camera_center,
-                #                 faces=faces, cam_params=cam_params, keypoints_2d=keypoints_2d, save_filename=save_filename,
-                #                 ground_y=ground_y,
-                #                 mesh_color=mesh_color, fast_render=True)
+                    #     pcd = o3d.geometry.PointCloud()
+                    #     pcd.points = o3d.utility.Vector3dVector(ground_y.unsqueeze(0).cpu().numpy())
+                    #     o3d.io.write_point_cloud(os.path.join('results', f"{os.path.splitext(img_name)[0]}_{body_type}_debug_anchor.ply"), pcd)
 
     #################################################
     # Postprocessing: smoothing to remove jittering #

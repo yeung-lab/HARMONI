@@ -209,14 +209,14 @@ def render_image_group(
         images_save = np.concatenate([np.ones((120, images_save.shape[1], 3)).astype(np.uint8) * 255, images_save], axis=0)
 
         images_save = cv2.putText(
-            images_save, 'Ground y: '+str(round(ground_y, 3)), (image.shape[1], 30), 
+            images_save, f'Ground y: {round(ground_y, 3)}', (image.shape[1], 30), 
             cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255))
         
         for i, (color, kp_2d) in enumerate(zip(mesh_color, keypoints_2d)):
             R, G, B = list(colors[color])
             openpose_conf = round(kp_2d[:,2].mean(), 2) * 100
             images_save = cv2.putText(
-                images_save, 'Track id: '+str(track_ids[i])+'. OpenPose Conf: '+str(openpose_conf) + "%", (image.shape[1], 70+i*30), 
+                images_save, 'Track id: '+str(track_ids[i])+'. OpenPose Conf: {openpose_conf} %', (image.shape[1], 70+i*30), 
                 cv2.FONT_HERSHEY_TRIPLEX, 1, (int(R), int(G), int(B)), 2)
        
         for i, text in enumerate(desc):

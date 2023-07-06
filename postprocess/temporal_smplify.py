@@ -34,7 +34,8 @@ class TemporalSMPLify():
                  focal_length=5000,
                  use_lbfgs=True,
                  device=torch.device('cuda'),
-                 max_iter=20  # for LBFGS
+                 max_iter=20,  # for LBFGS
+                 ground_weight=100
                  ):
 
         # Store options
@@ -42,6 +43,7 @@ class TemporalSMPLify():
         self.focal_length = focal_length
         self.step_size = step_size
         self.max_iter = max_iter
+        self.ground_weight = ground_weight
         # Ignore the the following joints for the fitting process
         ign_joints = ['OP Neck', 'OP RHip', 'OP LHip'] #, 'Right Hip', 'Left Hip']
         self.ign_joints = [JOINT_IDS[i] for i in ign_joints]
@@ -176,7 +178,7 @@ class TemporalSMPLify():
                     loss = temporal_body_fitting_loss(body_pose, betas, model_joints, camera_translation, camera_center,
                                              joints_2d, joints_conf, self.pose_prior,
                                              focal_length=self.focal_length, 
-                                             ground_y=ground_y, ground_normal=ground_normal)
+                                             ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight)
                     loss.backward()
                     return loss
 
@@ -192,7 +194,8 @@ class TemporalSMPLify():
                 model_joints = smpl_output.joints
                 loss = temporal_body_fitting_loss(body_pose, betas, model_joints, camera_translation, camera_center,
                                          joints_2d, joints_conf, self.pose_prior,
-                                         focal_length=self.focal_length)
+                                         focal_length=self.focal_length,
+                                         ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight)
                 # print('Body loss: {}'.format(loss.item()))
                 body_optimizer.zero_grad()
                 loss.backward()

@@ -36,14 +36,16 @@ class Dataset(data.Dataset):
         
         num_persons = 0
         person_to_img = {}  # {pid: [img_name, person_index]}
+        img_to_img_id = {}
         person_to_det = {}
-        for img_path, keypoints_list in results.items():
-            img_id = os.path.basename(img_path)
+        for img_id, (img_path, keypoints_list) in enumerate(results.items()):
+            img_name = os.path.basename(img_path)
+            img_to_img_id[img_name] = img_id
 
             for i in range(len(keypoints_list)):
-                person_to_img[num_persons] = [img_id, i]
+                person_to_img[num_persons] = [img_name, i]
                 person_to_det[num_persons] = {
-                    'img_name': img_id,
+                    'img_name': img_name,
                     'keypoints_25': keypoints_list[i],
                     # 'bbox':  # x,y,w,h
                 }
@@ -56,6 +58,7 @@ class Dataset(data.Dataset):
         self.num_persons = num_persons
         self.num_ghost_detections = 0
         self.person_to_img = person_to_img  # mapping from person id to img name and person index within the image
+        self.img_to_img_id = img_to_img_id
         self.person_to_det = person_to_det
         self.track_to_id = track_to_id  # mapping from track id to list of person ids. Used in main fitting loop.
         self.id_to_track = id_to_track
@@ -241,7 +244,7 @@ class Dataset(data.Dataset):
 
         track_id = self.id_to_track[idx]
         body_type = self.track_body_types[track_id][0]
-        result = {'img_name': img_name, 'keypoints': kp, 'body_type': body_type, 
+        result = {'img_name': img_name, 'keypoints': kp, 'body_type': body_type,
                   'yhxw': yhxw, 'idx': idx, 'norm_cropped_img': self.transform(cropped_img), 'is_ghost': is_ghost}
         return result
 
