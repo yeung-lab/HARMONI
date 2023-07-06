@@ -111,6 +111,7 @@ def collect_results_for_image_dapa(pred_pose, pred_betas, pred_cam, pred_transl,
             verts_results[img_name].append(verts)
             assert results_batch[i] is None
             results_batch[i] = {
+                'img_name': img_name,
                 'betas': pred_betas[i].unsqueeze(0).cpu().numpy(), 
                 'pred_cameras': pred_cam[i].unsqueeze(0).cpu().numpy(), 
                 'body_pose': pred_pose[i, 3:].unsqueeze(0).cpu().numpy(), 

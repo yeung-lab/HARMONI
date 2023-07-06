@@ -58,6 +58,8 @@ def main(args):
         dataset = Dataset(
             images_folder, out_folder=out_folder, tracker_type=args.tracker_type, cfg=cfg
         )
+        if args.ground_constraint:
+            dataset.estimate_ground_plane_normal()
         joblib.dump(dataset, dataset_path)
         logger.info('Saved dataset.pt to folder: ' + out_folder)
 
@@ -98,12 +100,6 @@ def main(args):
     else:
         smplify_runner = None
     
-    # load ground normal
-    if args.ground_constraint:
-        # TODO (Jen): bake it into dataset. e.g. dataset.estimate_ground_normal()
-        with open(os.path.join(out_folder, 'ground_estimation', 'ground_normals.pkl'), 'rb') as f:
-            ground_normals = pickle.load(f)  # a dictionary from scene_id to a tuple ((start_frame_id, end_frame_id), ground_normal)
-
     # Begin main loop
     adult_tracks, infant_tracks = dataset.get_sorted_track_by_body_type()
 
@@ -115,19 +111,20 @@ def main(args):
 
     cam_pitch = cam_roll = 0.  # settings these would make render_rotmat an identity matrix.
     cam_vfov = 0.6  # this does not matter
-    cam_rotmat = render_rotmat = batch_euler2matrix(torch.tensor([[-cam_pitch, 0., cam_roll]]))[0].numpy()
+    cam_rotmat = batch_euler2matrix(torch.tensor([[-cam_pitch, 0., cam_roll]]))[0].numpy()
     cam_params = np.array([cam_vfov, cam_pitch, cam_roll, cam_focal_length])   # Identity matrix
 
     for fit_id, track_id in enumerate(tracks_to_be_fitted):
-        refine_with_ground = fit_id >= len(adult_tracks)  # iterate over tracks a second time and use the floor 
+        refine_with_ground = fit_id >= len(adult_tracks)  # iterate over tracks a second time and use the floor
         if fit_id == len(adult_tracks) and args.ground_constraint:
+            logger.info('Fitting the rest of the tracks with ground constraint.')
             # compute ankles per scene
             scene_to_mean_floor = {}
-            for scene_id, ((scene_start, scene_end), normal_vec) in ground_normals.items():
+            for scene_id, ((scene_start, scene_end), normal_vec) in dataset.ground_normals.items():
                 normal_vec = normal_vec[[0,2,1]] 
                 adult_ankles = [
-                    results_holder.adult_bottom['frame{:06d}.jpg'.format(frame_id)] 
-                    for frame_id in range(scene_start, scene_end) if 'frame{:06d}.jpg'.format(frame_id) in results_holder.adult_bottom
+                    results_holder.adult_bottom[dataset.img_names[frame_id]] 
+                    for frame_id in range(scene_start, scene_end) if dataset.img_names[frame_id] in results_holder.adult_bottom
                 ]
                 if len(adult_ankles) == 0: 
                     scene_to_mean_floor[scene_id] = None
@@ -149,30 +146,28 @@ def main(args):
             batch = dataloader.collate_fn([dataset[i] for i in batch_pidxs])
 
             # image_id = int(os.path.splitext(batch['img_name'][0])[0].strip('frame_'))
-            start_image_id = re.findall(r'\d+', os.path.splitext(batch['img_name'][0])[0])
+            start_image_id = batch['idx'].item()
 
             ####################################
             # initialize pose, shape with DAPA #
             ####################################
             if args.ground_constraint:
                 # load ground normal, and set cam_rotmat to be identity matrix
-                for scene_id, (scene_rng, normal_vec) in ground_normals.items():
+                for scene_id, (scene_rng, normal_vec) in dataset.ground_normals.items():
                     if start_image_id >= scene_rng[0] and start_image_id <= scene_rng[1]:
-                        logger.info(f'This scene is from frame {scene_rng[0]} to {scene_rng[1]}. Ground normal vector is {str(normal_vec)}.')
                         normal_vec = normal_vec[[0,2,1]]  # swap y and z
                         break
-
+            
                 if refine_with_ground:
+                    logger.info(f'This scene is from frame {scene_rng[0]} to {scene_rng[1]}. Ground normal vector is {str(normal_vec)}.')
                     ground_y = scene_to_mean_floor[scene_id]
+                    ground_y = torch.from_numpy(ground_y).to(device).float()
                     logger.info('Refine with floor at ' + str(ground_y))
                 else:
                     ground_y = None
 
-                normal_vec = torch.from_numpy(normal_vec).to(device).float()  
-                if ground_y is not None:
-                    ground_y = torch.from_numpy(ground_y).to(device).float()
-                cam_rotmat = torch.from_numpy(cam_rotmat).to(device)
-            
+                normal_vec = torch.from_numpy(normal_vec).to(device).float()
+
             if args.hps == 'dapa':
                 with torch.no_grad():
                     if body_type == 'infant':
@@ -209,7 +204,7 @@ def main(args):
             ##############################################
             if not args.run_smplify:
                 # parse results
-                results_by_img_name, results_batch = collect_results_for_image_dapa(
+                _, results_batch = collect_results_for_image_dapa(
                     pred_pose, pred_betas, pred_camera, None, batch, cam_focal_length, orig_img_width, orig_img_height)
                 # update results in this batch
                 results_holder.update_results(batch['idx'].numpy(), results_batch)
@@ -217,16 +212,25 @@ def main(args):
                 model_type = 'smil' if body_type == 'infant' else 'smpl'
 
                 smplify_results, reproj_loss = smplify_runner(model_type, init_global_orient, init_pose, init_betas, init_transl, 
-                                                              camera_center, batch['keypoints'])
+                                                              camera_center, batch['keypoints'], ground_y, normal_vec)
                 refined_thetas = smplify_results['theta']
                 refined_transl = refined_thetas[:, :3]
                 refined_pose = refined_thetas[:, 3:-10]
                 refined_betas = refined_thetas[:, -10:]
                 
-                results_by_img_name, results_batch = collect_results_for_image_dapa(
+                _, results_batch = collect_results_for_image_dapa(
                     refined_pose, refined_betas, pred_camera, refined_transl, batch, cam_focal_length, orig_img_width, orig_img_height)
 
                 results_holder.update_results(batch['idx'].numpy(), results_batch)
+
+                for idx_, res in enumerate(results_batch):
+                    img_name = res['img_name']
+                    joints = res['joints']
+                    # project the left/right ankles onto the normal_vec (unit-norm)
+                    left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())
+                    right_ankle_projection = np.dot(joints[0, 14], normal_vec.cpu().numpy())
+                    results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
+       
 
                 # TODO (Jen): implement later.
                 #################################################

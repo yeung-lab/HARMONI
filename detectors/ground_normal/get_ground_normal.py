@@ -7,7 +7,7 @@ python detectors/ground_normal/get_ground_normal.py
 import os, sys
 
 sys.path.insert(1, './detectors/panoptic_deeplab')
-
+import open3d as o3d
 from loguru import logger
 from detectron2.data.detection_utils import read_image
 from detectron2.config import get_cfg
@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from detectors.panoptic_deeplab.tools_d2.d2.predictor import VisualizationDemo
 from detectors.ground_normal.utils import estimate_plane_xy_diff_range, write_depth, init_network
 from detectors.ground_normal.utils import read_image as local_read_image
-# from detectors.midas.api import MiDaSInference, load_midas_transform
+
 
 def setup_cfg(config_file, opts, confidence_threshold):
     # load config from file and command-line arguments
@@ -200,9 +200,9 @@ def compute(image_list, output_path, shot_info, num_per_scene):
             # visualized_output.save(f'scene_{scene_id}_{frame_name}_panoptic.png')
             # img_out = os.path.join(output_path, f'scene_{scene_id}_{frame_name}.jpg')
             # plt.imsave(img_out, image)
-            img_out = os.path.join(output_path, f'scene_{scene_id}_{frame_name}_depth_map.jpg')
+            # img_out = os.path.join(output_path, f'scene_{scene_id}_{frame_name}_depth_map.jpg')
             out_depth_3 = np.stack([out_depth, out_depth, out_depth], 2) / out_depth.max()
-            plt.imsave(img_out, out_depth_3)
+            # plt.imsave(img_out, out_depth_3)
             # img_out = os.path.join(output_path, f'scene_{scene_id}_{frame_name}_depth_ground.jpg')
             # plt.imsave(img_out, out_depth_3 * road[..., None])
 
@@ -255,11 +255,10 @@ def compute(image_list, output_path, shot_info, num_per_scene):
 
     with open(os.path.join(output_path, 'ground_normals.pkl'), 'wb') as f:
         pickle.dump(ground_normal_all_scenes, f)
-        
+    return ground_normal_all_scenes        
 
 
 def save_normal(normal_vec, out_folder):
-    import open3d as o3d
     starting_point = np.array([0, 0, 0])
     sampled_points = np.linspace(starting_point, starting_point + normal_vec)
     pcd = o3d.geometry.PointCloud()
@@ -269,7 +268,7 @@ def save_normal(normal_vec, out_folder):
 
 if __name__ == '__main__':
     
-    img_base = './data/demo/vid2'
+    img_base = './data/demo/vid'
     output_path = './results/ground_normal'
     os.makedirs(output_path, exist_ok=True)
 

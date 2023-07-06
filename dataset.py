@@ -13,16 +13,18 @@ from detectors.classifier import BodyTypeClassifier
 from detectors.openpose import run_on_images as run_openpose
 
 from utils.img_utils import cropout_openpose_one_third, default_img_transform, crop
-
+from detectors.ground_normal.get_ground_normal import compute
 
 class Dataset(data.Dataset):
     """ Holds images, 2D keypoints, their predicted body types (infant vs. adult) and additional info.
     """ 
     def __init__(self, img_folder, out_folder, tracker_type, cfg):
         self.img_folder = img_folder
+        self.out_folder = out_folder
         img_paths = sorted(glob(os.path.join(img_folder, '*')))
         ext_list = ['png', 'jpg', 'jpeg']
         self.img_paths = [img_path for img_path in img_paths if img_path.split('.')[-1] in ext_list]
+        self.img_names = [os.path.basename(img_path) for img_path in self.img_paths]
         logger.info(f'Found {len(self.img_paths)} images in {img_folder}')
         image = cv2.imread(self.img_paths[0])
         image_height, image_width, _ = image.shape
@@ -242,3 +244,16 @@ class Dataset(data.Dataset):
         result = {'img_name': img_name, 'keypoints': kp, 'body_type': body_type, 
                   'yhxw': yhxw, 'idx': idx, 'norm_cropped_img': self.transform(cropped_img), 'is_ghost': is_ghost}
         return result
+
+    def estimate_ground_plane_normal(self):
+        logger.info("Estimating ground plane normal...")
+        output_path = os.path.join(self.out_folder, 'ground_normal')
+        os.makedirs(output_path, exist_ok=True)
+        shot_info = {
+            'Start Frame': [0],
+            'End Frame': [len(self.img_paths)],
+        }  # TODO (Jen): dummy shot info. Integrate real one later.
+        num_per_scene = 5
+        ground_normal = compute(self.img_paths, output_path, shot_info, num_per_scene)
+        self.ground_normals = ground_normal  # scene_id: (scene_rng, mean_normal)
+        logger.info("Ground plane normal estimated.")

@@ -53,7 +53,8 @@ class TemporalSMPLify():
                                           dtype=torch.float32).to(device)
         self.use_lbfgs = use_lbfgs
 
-    def __call__(self, body_type, init_global_orient, init_pose, init_betas, init_cam_t, camera_center, keypoints_2d):
+    def __call__(self, body_type, init_global_orient, init_pose, init_betas, init_cam_t, camera_center, keypoints_2d, 
+                 ground_y, ground_normal):
         """Perform body fitting.
         Input:
             init_pose: SMPL pose estimate
@@ -61,6 +62,7 @@ class TemporalSMPLify():
             init_cam_t: Camera translation estimate
             camera_center: Camera center location
             keypoints_2d: Keypoints used for the optimization
+            ground_y: if specified, apply ground plane constraint
         Returns:
             vertices: Vertices of optimized shape
             joints: 3D joints of optimized shape
@@ -173,7 +175,8 @@ class TemporalSMPLify():
 
                     loss = temporal_body_fitting_loss(body_pose, betas, model_joints, camera_translation, camera_center,
                                              joints_2d, joints_conf, self.pose_prior,
-                                             focal_length=self.focal_length)
+                                             focal_length=self.focal_length, 
+                                             ground_y=ground_y, ground_normal=ground_normal)
                     loss.backward()
                     return loss
 

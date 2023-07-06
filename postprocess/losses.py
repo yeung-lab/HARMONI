@@ -130,12 +130,35 @@ def camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_center, joi
     return total_loss.sum()
 
 
+# copied from github.com/nicolasugrinovic/size_depth_disambiguation
+def loss_ground_plane(anchor, normal, point):
+    '''
+    Args:
+        anchor: location of the anchor (a point on the ground plane.)
+        normal: la normal del plano estimado
+        point: punto conocido en el plano, que zanfir lo toma como la mediana ponderada
+
+    Returns: L1 loss with the plane
+    '''
+
+    # take de predicted 3d joints and measure dist to plane w normal
+    median = point
+    # dot product w normal
+    res = torch.matmul((anchor - median) / torch.norm(anchor - median, 2, -1, keepdim=True), normal[:, None]).sum(1)
+    left_ankles_loss = torch.abs(res)
+    res = torch.matmul((anchor - median) / torch.norm(anchor - median, 2, -1, keepdim=True), normal[:, None]).sum(1)
+    right_ankles_loss = torch.abs(res)
+    gp_loss = left_ankles_loss.sum() + right_ankles_loss.sum()
+    # import pdb; pdb.set_trace()
+    return gp_loss
+
+
 def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_center,
                                joints_2d, joints_conf, pose_prior,
                                focal_length=5000, sigma=100, pose_prior_weight=4.78,
                                shape_prior_weight=5, angle_prior_weight=15.2,
                                smooth_2d_weight=0.01, smooth_3d_weight=1.0,
-                               output='sum'):
+                               output='sum', ground_y=None, ground_normal=None):
     """
     Loss function for body fitting
     """
@@ -163,6 +186,14 @@ def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_
     shape_prior_loss = (shape_prior_weight ** 2) * (betas ** 2).sum(dim=-1)
 
     total_loss = reprojection_loss.sum(dim=-1) + pose_prior_loss + angle_prior_loss + shape_prior_loss
+
+    if ground_y is not None:
+        anchor = ground_y[None]
+        ground_loss = loss_ground_plane(anchor, ground_normal, model_joints[:, 11])
+        ground_loss += loss_ground_plane(anchor, ground_normal, model_joints[:, 14])
+        ground_loss *= 100
+        print(total_loss.item(), ground_loss.item())
+        total_loss += ground_loss
 
     # Smooth 2d joint loss
     joint_conf_diff = joints_conf[1:]
