@@ -27,12 +27,12 @@ def get_colors():
 def get_checkerboard_plane(plane_width=4, num_boxes=9, center=True):
 
     pw = plane_width / num_boxes
-    white = [220, 220, 220, 255]
-    black = [35, 35, 35, 255]
+    white = [220, 220, 220, 100]
+    black = [35, 35, 35, 100]
 
     meshes = []
     for i in range(num_boxes):
-        for j in range(num_boxes):
+        for j in range(num_boxes//2, num_boxes):
             c = i * pw, j * pw
             ground = trimesh.primitives.Box(
                 center=[0, 0, -0.0001],
@@ -68,3 +68,22 @@ def look_at_camera(position, target, up):
     translation_vector = -np.dot(rotation_matrix, position)
 
     return rotation_matrix, translation_vector
+
+
+def rotation_matrix_between_vectors(v1, v2):
+    v1 = np.array(v1)  # Convert to numpy array
+    v2 = np.array(v2)
+
+    v1_normalized = v1 / np.linalg.norm(v1)  # Normalize vectors
+    v2_normalized = v2 / np.linalg.norm(v2)
+
+    axis = np.cross(v1_normalized, v2_normalized)  # Calculate the rotation axis
+    dot_product = np.dot(v1_normalized, v2_normalized)  # Calculate the dot product
+    # import pdb; pdb.set_trace()
+    skew_symmetric_matrix = np.array([[0, -axis[2], axis[1]],
+                                      [axis[2], 0, -axis[0]],
+                                      [-axis[1], axis[0], 0]])
+
+    rotation_matrix = np.eye(3) + skew_symmetric_matrix + np.dot(skew_symmetric_matrix, skew_symmetric_matrix) * (1 / (1 + dot_product))
+
+    return rotation_matrix

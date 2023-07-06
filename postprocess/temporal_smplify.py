@@ -105,10 +105,10 @@ class TemporalSMPLify():
         # Optimize only camera translation and body orientation
         body_pose.requires_grad = False
         betas.requires_grad = False
-        global_orient.requires_grad = True
+        global_orient.requires_grad = False
         camera_translation.requires_grad = True
 
-        camera_opt_params = [global_orient, camera_translation]
+        camera_opt_params = [camera_translation]
        
 
         if self.use_lbfgs:
@@ -126,7 +126,9 @@ class TemporalSMPLify():
 
                     loss = temporal_camera_fitting_loss(model_joints, camera_translation,
                                                init_cam_t, camera_center,
-                                               joints_2d, joints_conf, focal_length=self.focal_length)
+                                               joints_2d, joints_conf, focal_length=self.focal_length,
+                                               ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight
+                                               )
                     loss.backward()
                     return loss
 
@@ -143,8 +145,9 @@ class TemporalSMPLify():
                 
                 loss = temporal_camera_fitting_loss(model_joints, camera_translation,
                                            init_cam_t, camera_center,
-                                           joints_2d, joints_conf, focal_length=self.focal_length)
-                # print('Camera loss: {}'.format(loss.item()))
+                                           joints_2d, joints_conf, focal_length=self.focal_length,
+                                           ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight
+                                           )
                 camera_optimizer.zero_grad()
                 loss.backward()
                 camera_optimizer.step()
@@ -157,8 +160,8 @@ class TemporalSMPLify():
         body_pose.requires_grad = True
         betas.requires_grad = True
         global_orient.requires_grad = True
-        camera_translation.requires_grad = False
-        body_opt_params = [body_pose, betas, global_orient]
+        camera_translation.requires_grad = True
+        body_opt_params = [body_pose, betas, global_orient, camera_translation]
 
         # For joints ignored during fitting, set the confidence to 0
         joints_conf[:, self.ign_joints] = 0.
@@ -178,7 +181,8 @@ class TemporalSMPLify():
                     loss = temporal_body_fitting_loss(body_pose, betas, model_joints, camera_translation, camera_center,
                                              joints_2d, joints_conf, self.pose_prior,
                                              focal_length=self.focal_length, 
-                                             ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight)
+                                             ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight*0.1
+                                             )
                     loss.backward()
                     return loss
 
@@ -195,7 +199,8 @@ class TemporalSMPLify():
                 loss = temporal_body_fitting_loss(body_pose, betas, model_joints, camera_translation, camera_center,
                                          joints_2d, joints_conf, self.pose_prior,
                                          focal_length=self.focal_length,
-                                         ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight)
+                                         ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight*0.1
+                                         )
                 # print('Body loss: {}'.format(loss.item()))
                 body_optimizer.zero_grad()
                 loss.backward()

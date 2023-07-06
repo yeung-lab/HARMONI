@@ -131,7 +131,7 @@ def main(args):
                 mean = np.mean(ankle_projections)
                 std = np.std(ankle_projections)
                 mean_floor = np.mean(ankle_projections[np.abs(ankle_projections - mean) < std])  # filter out the outliers
-                scene_to_mean_floor[scene_id] = mean_floor * normal_vec[[0,2,1]]  # location of the anchor ankle.
+                scene_to_mean_floor[scene_id] = mean_floor * normal_vec#[[0,2,1]]  # location of the anchor ankle.
         
         pidxs = dataset.track_to_id[track_id]
         body_type = dataset.track_body_types[track_id][0]
@@ -152,7 +152,7 @@ def main(args):
                 # load ground normal, and set cam_rotmat to be identity matrix
                 for scene_id, (scene_rng, normal_vec_) in dataset.ground_normals.items():
                     if start_image_id >= scene_rng[0] and start_image_id <= scene_rng[1]:
-                        normal_vec = normal_vec_[[0,2,1]].copy()  # swap y and z
+                        normal_vec = normal_vec_ #[[0,2,1]].copy()  # swap y and z
                         break
             
                 if refine_with_ground:
@@ -199,7 +199,7 @@ def main(args):
             ##############################################
             # Collect results and optionally run SMPLify #
             ##############################################
-            if not args.run_smplify:
+            if not args.run_smplify or fit_id < len(adult_tracks):
                 # parse results
                 _, results_batch = collect_results_for_image_dapa(
                     pred_pose, pred_betas, pred_camera, None, batch, cam_focal_length, orig_img_width, orig_img_height)
@@ -220,22 +220,22 @@ def main(args):
 
                 results_holder.update_results(batch['idx'].numpy(), results_batch)
 
-                for idx_, res in enumerate(results_batch):
-                    img_name = res['img_name']
-                    joints = res['joints']
-                    # rot_mtx = trimesh.transformations.rotation_matrix(np.radians(180), [1, 0, 0])
-                    rot_mtx = np.array([
-                        [1, 0, 0],
-                        [0, -1, 0],
-                        [0, 0, -1]
-                    ])[np.newaxis, :, :]
-                    joints = joints @ rot_mtx - res['transl'][:, np.newaxis]
+            for idx_, res in enumerate(results_batch):
+                img_name = res['img_name']
+                joints = res['joints']
+                # rot_mtx = trimesh.transformations.rotation_matrix(np.radians(180), [1, 0, 0])
+                rot_mtx = np.array([
+                    [1, 0, 0],
+                    [0, -1, 0],
+                    [0, 0, -1]
+                ])[np.newaxis, :, :]
+                joints = joints @ rot_mtx - res['transl'][:, np.newaxis]
 
-                    # project the left/right ankles onto the normal_vec (unit-norm)
-                    left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())  # multiplying by normal_vec is done later.
-                    right_ankle_projection = np.dot(joints[0, 14], normal_vec.cpu().numpy())
-                    results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
-                    
+                # project the left/right ankles onto the normal_vec (unit-norm)
+                left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())  # multiplying by normal_vec is done later.
+                right_ankle_projection = np.dot(joints[0, 14], normal_vec.cpu().numpy())
+                results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
+                
                     # pcd = o3d.geometry.PointCloud()
                     # pcd.points = o3d.utility.Vector3dVector(joints[0])
                     # o3d.io.write_point_cloud(os.path.join(out_folder, 
@@ -290,7 +290,8 @@ def main(args):
             dataset, results_holder, images_folder, out_render_path, cfg, cam_params, 
             skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
             camera_center=camera_center, img_list=None, 
-            add_ground_plane=True, fast_render=True, top_view=args.top_view)
+            fast_render=True, top_view=args.top_view, 
+            add_ground_plane=True, anchor=ground_y.cpu().numpy(), ground_normal=normal_vec.cpu().numpy())
 
         if args.save_video:
             cmd = [

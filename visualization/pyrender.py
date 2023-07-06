@@ -13,7 +13,7 @@ import pyrender
 
 from hps.body_model import init_body_model
 from utils.geometry import batch_euler2matrix
-from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera
+from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera, rotation_matrix_between_vectors
 from visualization.keypoints import draw_skeleton
 
 
@@ -21,19 +21,15 @@ colors = get_colors()
 
 def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
            camera_center=np.array([960, 540]), img_list=None, fast_render=True, label_str=[''], use_smoothed=False,
-           ground_y= -1.0, add_ground_plane=False, top_view=False):
+           add_ground_plane=False, anchor=None, ground_normal=None, top_view=False):
     """Generate meshes from the saved estimated SMPL parameters, and then render.
+
+    anchor: a point on the ground plane
+    ground_normal: the normal of the ground plane
     """
     adult_bm = init_body_model(cfg.smpl_model_path, batch_size=1, create_body_pose=True).to(device)
     infant_bm = init_body_model(cfg.smil_model_path, batch_size=1, create_body_pose=True).to(device)
     smpl_faces = adult_bm.faces
-
-    # adult_feet = np.array([max(v) for v in results.adult_bottom.values() if len(v) > 0])
-    # mean = np.mean(adult_feet)
-    # std = np.std(adult_feet)
-    # ground_y = np.mean(adult_feet[np.abs(adult_feet - mean) < 2 * std])
-    ground_y = - 0.5
-    logger.info('Ground plane is at '+str(ground_y))
 
     img_to_persons = defaultdict(list)
     for k, frame_name in dataset.person_to_img.items():
@@ -54,21 +50,9 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
         render_rotmat = batch_euler2matrix(torch.tensor([[-cam_pitch, 0., cam_roll]]))[0]
 
         persons = img_to_persons[img_name]
-        # print(img_name, 'has', len(persons), 'persons')
         if skip_if_no_infant and len(persons) == 1: continue
 
-        # fetch ground information
-        # adult_bottoms = results.adult_bottom[img_name]
-        # if len(adult_bottoms) == 0:
-        #     ground_y = mean_floor
-        # else:
-        #     ground_y = np.max(results.adult_bottom[img_name])
-        #     if np.abs(ground_y-ground_y) > 0.5:
-        #         ground_y = mean_floor
-
         if len(results.infant_bottom[img_name]) > 0:
-            infant_to_ground = np.abs(ground_y - np.array(results.infant_bottom[img_name])).min()
-            # desc = ['Infant to ground: {} m.'.format(round(infant_to_ground,3))] + label_str
             desc = label_str
         else:
             desc = label_str
@@ -127,8 +111,9 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
         
         render_image_group(
             os.path.join(img_path, img_name), camera_translations, vertices, render_rotmat.numpy(), focal_lengths, camera_center,
-            faces=faces, cam_params=cam_params, keypoints_2d=keypoints_2d, track_ids=track_ids, save_filename=save_filename, ground_y=ground_y,
+            faces=faces, keypoints_2d=keypoints_2d, track_ids=track_ids, save_filename=save_filename,
             mesh_color=mesh_colors, desc=desc, mesh_filename=mesh_filename, fast_render=fast_render, add_ground_plane=add_ground_plane,
+            anchor=anchor, ground_normal=ground_normal,
             top_view=top_view)
 
 
@@ -146,8 +131,7 @@ def render_image_group(
         save_filename= None,
         keypoints_2d= None,
         track_ids = None,
-        cam_params= None,
-        ground_y= -1.0,
+        anchor=None, ground_normal=None,
         desc=[], fast_render=True, add_ground_plane=False,
         top_view=False
 ):
@@ -184,7 +168,7 @@ def render_image_group(
 
     rendered_images = []
     for camera_pose, cam_dist_scalar in zip(camera_poses, cam_dist_scalars):
-        rendered_img, ground_y = render_with_pyrender(
+        rendered_img = render_with_pyrender(
             image=np.zeros_like(image),
             camera_translations=camera_translation,
             vertices=vertices,
@@ -197,7 +181,7 @@ def render_image_group(
             mesh_filename=mesh_filename,
             camera_pose=camera_pose,
             cam_dist_scalar=cam_dist_scalar,
-            ground_y=ground_y, fast_render=fast_render, add_ground_plane=add_ground_plane
+            anchor=anchor, ground_normal=ground_normal, fast_render=fast_render, add_ground_plane=add_ground_plane
         )
         rendered_images.append(rendered_img)
     output_img = np.concatenate([image, *rendered_images], axis=1)
@@ -208,15 +192,16 @@ def render_image_group(
         # pad the top of images_save with white space
         images_save = np.concatenate([np.ones((120, images_save.shape[1], 3)).astype(np.uint8) * 255, images_save], axis=0)
 
-        images_save = cv2.putText(
-            images_save, f'Ground y: {round(ground_y, 3)}', (image.shape[1], 30), 
-            cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255))
+        # ground_y = 0. # dummy value. TODO: fix later. Maybe print ground normal?
+        # images_save = cv2.putText(
+        #     images_save, f'Ground y: {round(ground_y, 3)}', (image.shape[1], 30), 
+        #     cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255))
         
         for i, (color, kp_2d) in enumerate(zip(mesh_color, keypoints_2d)):
             R, G, B = list(colors[color])
             openpose_conf = round(kp_2d[:,2].mean(), 2) * 100
             images_save = cv2.putText(
-                images_save, 'Track id: '+str(track_ids[i])+'. OpenPose Conf: {openpose_conf} %', (image.shape[1], 70+i*30), 
+                images_save, f'Track id: {track_ids[i]}. OpenPose Conf: {openpose_conf} %', (image.shape[1], 70+i*30), 
                 cv2.FONT_HERSHEY_TRIPLEX, 1, (int(R), int(G), int(B)), 2)
        
         for i, text in enumerate(desc):
@@ -244,7 +229,7 @@ def render_with_pyrender(
         cam_dist_scalar: float = 1.0,
         mesh_filename: str = None,
         add_ground_plane: bool = True,
-        ground_y: float = -1.0,
+        anchor=None, ground_normal=None,
         fast_render: bool=True
 ) -> np.ndarray:
     num_persons = len(vertices)
@@ -264,9 +249,9 @@ def render_with_pyrender(
             baseColorFactor=(mesh_color[0] / 255., mesh_color[1] / 255., mesh_color[2] / 255., alpha))
 
         camera_translation[0] *= -1.
-        camera_translation[2] *= cam_dist_scalar
-        ground_translation = np.array([0, -ground_y, 10])
-        ground_translation[2] *= cam_dist_scalar
+        # camera_translation[2] *= cam_dist_scalar
+        # ground_translation = np.array([0, -ground_y, 10])
+        # ground_translation[2] *= cam_dist_scalar
 
         mesh = trimesh.Trimesh(vertices_, faces_, process=False)
         rot = trimesh.transformations.rotation_matrix(
@@ -286,11 +271,12 @@ def render_with_pyrender(
         scene.add(mesh, 'mesh'+str(idx))
 
     if add_ground_plane:
-        ground_trimesh = get_checkerboard_plane(plane_width=8)
+        ground_trimesh = get_checkerboard_plane(plane_width=18, num_boxes=20)
         pose = trimesh.transformations.rotation_matrix(np.radians(90), [1, 0, 0])  # (x,y,z) -> (x,-z,y)
        
-        pose[:3, :3] = pose[:3, :3] #@ view_rot
-        pose[:3, 3] = - camera_rotation @ ground_translation
+        ground_rot_mtx = rotation_matrix_between_vectors(np.array([0, 1, 0]), ground_normal)
+        pose[:3, :3] = pose[:3, :3] @ ground_rot_mtx
+        pose[:3, 3] = anchor
 
         for box in ground_trimesh:
             box.apply_transform(pose)
@@ -333,5 +319,5 @@ def render_with_pyrender(
     color = color.astype(np.float32) / 255.0
     valid_mask = (rend_depth > 0)[:, :, None]
     output_img = (color[:, :, :3] * valid_mask + (1 - valid_mask) * image)
-    return output_img, ground_y
+    return output_img
 

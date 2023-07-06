@@ -197,7 +197,7 @@ def compute(image_list, output_path, shot_info, num_per_scene):
                 floor_other_merged | dirt_merged | pavement_merged | floor_wood
 
             # out_filename = os.path.join(output_path, f'scene_{scene_id}_{frame_name}_panoptic.png')
-            # visualized_output.save(f'scene_{scene_id}_{frame_name}_panoptic.png')
+            visualized_output.save(os.path.join(output_path, f'scene_{scene_id}_{frame_name}_panoptic.png'))
             # img_out = os.path.join(output_path, f'scene_{scene_id}_{frame_name}.jpg')
             # plt.imsave(img_out, image)
             # img_out = os.path.join(output_path, f'scene_{scene_id}_{frame_name}_depth_map.jpg')
@@ -250,6 +250,9 @@ def compute(image_list, output_path, shot_info, num_per_scene):
         # print(normal_vectors_same_dir)
 
         mean_normal = np.mean(normal_vectors_same_dir, 0)
+        mean_normal = mean_normal[[0, 2, 1]]  # convert to y-up
+        if mean_normal[1] > 0: mean_normal = - mean_normal  # point downward
+        mean_normal[0] *= -1  # flip x axis
         ground_normal_all_scenes[scene_id] = (scene_rng, mean_normal)
         save_normal(mean_normal, output_path)
 

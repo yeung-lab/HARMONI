@@ -6,14 +6,16 @@
 Priority
 - [x] Without preprocessing. Get the hps and visualization code working.
 - [x] Get refinement with 2D keypoints working.
-- Get ground plane constraint working.
+- [x] Get ground plane constraint working.
+- Add downstream attributes extraction.
 - Add preprocessing: tracking.
+- Add preprocessing: shot detection.
 - Add interactive correction.
 
 Later
 - audio
 - Colab, Dockerfile, gradio
-- Double check the license
+- Double check the license of dependencies and body models (e.g. SMPL)
 
 ## Installation
 Dependencies
@@ -26,14 +28,11 @@ Install conda environment.
 
 ## Running HARMONI on a sample video
 ```bash
-python main.py --images data/demo/vid --hps dapa --out_folder ./results --render --use_cached_dataset --top_view
+python main.py --images data/demo/vid --hps dapa --out_folder ./results --render --use_cached_dataset --ground_constraint
 
 Optional args:
-[--overlay_dyad_stats]
 [--ground_constraint]
 [--top_view]
-[--refine_with_kp]
-[--tracker]
 
 ```
 ## Compute downstream attributes

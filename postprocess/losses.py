@@ -131,7 +131,7 @@ def camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_center, joi
 
 
 # copied from github.com/nicolasugrinovic/size_depth_disambiguation
-def loss_ground_plane(anchor, normal, point):
+def loss_ground_plane(anchor, normal, point1, point2):
     '''
     Args:
         anchor: location of the anchor (a point on the ground plane.)
@@ -144,8 +144,23 @@ def loss_ground_plane(anchor, normal, point):
     # take de predicted 3d joints and measure dist to plane w normal
 
     # dot product w normal
-    res = torch.matmul((anchor - point) / torch.norm(anchor - point, 2, -1, keepdim=True), normal[:, None]).sum(1)
-    gp_loss = torch.abs(res)
+    point_to_anchor = (anchor - point1) / torch.norm(anchor - point1, 2, -1, keepdim=True)
+    point1_cos_theta = torch.matmul(point_to_anchor, normal[:, None]).sum(1)
+    point1_gp_loss = torch.abs(point1_cos_theta)  # cos_theta is 0 if two vectors are perpendicular
+
+    point_to_anchor = (anchor - point2) / torch.norm(anchor - point2, 2, -1, keepdim=True)
+    point2_cos_theta = torch.matmul(point_to_anchor, normal[:, None]).sum(1)
+    point2_gp_loss = torch.abs(point2_cos_theta)  # cos_theta is 0 if two vectors are perpendicular
+
+    gp_loss = torch.min(point1_gp_loss, point2_gp_loss)
+
+    # penalize if cos_theta is positive (above the ground plane). it makes the feet a little bit below the ground.
+    # Note: this is not the same as before (i.e. encourange vectors to be perpendicular), but works better.
+    point1_gp_lossabove_loss = torch.max(torch.zeros_like(point1_cos_theta), point1_cos_theta) * (1000)
+    point2_gp_lossabove_loss = torch.max(torch.zeros_like(point2_cos_theta), point2_cos_theta) * (1000)
+
+    gp_loss = point1_gp_lossabove_loss + point2_gp_lossabove_loss
+
     return gp_loss
 
 
@@ -212,10 +227,7 @@ def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_
         # o3d.io.write_point_cloud(os.path.join('results', "debug_anchor.ply"), pcd)
         # import pdb; pdb.set_trace()
         
-        right_ankle_loss = loss_ground_plane(anchor, ground_normal, joints_world[:, 11]) # right ankle
-        left_ankle_loss = loss_ground_plane(anchor, ground_normal, joints_world[:, 14])  # left ankle
-        ground_loss = torch.min(left_ankle_loss, right_ankle_loss)
-        # print(total_loss.item(), ground_loss.item())
+        ground_loss = loss_ground_plane(anchor, ground_normal, joints_world[:, 11], joints_world[:, 14]) # right ankle, left ankle
         total_loss += ground_loss * ground_weight
 
     # Smooth 2d joint loss
@@ -252,7 +264,7 @@ def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_
 
 
 def temporal_camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_center, joints_2d, joints_conf,
-                                 focal_length=5000, depth_loss_weight=100):
+                                 focal_length=5000, depth_loss_weight=100, ground_y=None, ground_normal=None, ground_weight=100.):
     """
     Loss function for camera optimization.
     """
@@ -281,4 +293,37 @@ def temporal_camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_ce
     depth_loss = (depth_loss_weight ** 2) * (camera_t[:, 2] - camera_t_est[:, 2]) ** 2
 
     total_loss = reprojection_loss + depth_loss
+
+    if ground_y is not None:
+        anchor = ground_y[None]
+
+        # convert to pyrender's coordinate system. 
+        rot_mtx = torch.tensor([
+            [1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1]
+        ]).float().to(model_joints.device).unsqueeze(0).expand(batch_size, -1, -1)
+        joints_world = model_joints @ rot_mtx - camera_t.unsqueeze(1)
+        
+        # import open3d as o3d
+        # import os
+        # import numpy as np
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(joints_world[0].detach().cpu().numpy())
+        # o3d.io.write_point_cloud(os.path.join('results', "debug_joints.ply"), pcd)
+
+        # starting_point = np.array([0, 0, 0])
+        # sampled_points = np.linspace(starting_point, starting_point + ground_normal.cpu().numpy())
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(sampled_points)
+        # o3d.io.write_point_cloud(os.path.join('results', "ground_normal.ply"), pcd)
+
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(anchor.cpu().numpy())
+        # o3d.io.write_point_cloud(os.path.join('results', "debug_anchor.ply"), pcd)
+        # import pdb; pdb.set_trace()
+        
+        ground_loss = loss_ground_plane(anchor, ground_normal, joints_world[:, 11], joints_world[:, 14])
+        total_loss += ground_loss * ground_weight ** 2
+
     return total_loss.sum()
