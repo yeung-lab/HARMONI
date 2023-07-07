@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from phalp.models.heads.mesh import *
-from phalp.utils.utils import *
-from phalp.utils.utils import (get_colors, numpy_to_torch_image,
+from phalp.phalp_utils.utils import *
+from phalp.phalp_utils.utils import (get_colors, numpy_to_torch_image,
                                perspective_projection)
 from phalp.visualize.py_renderer import Renderer
 from pycocotools import mask as mask_utils

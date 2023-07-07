@@ -3,7 +3,7 @@ import os
 import time
 import traceback
 import warnings
-
+os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
 warnings.filterwarnings('ignore')
 
 import cv2
@@ -14,18 +14,16 @@ import torch
 import torch.nn as nn
 from detectron2 import model_zoo
 from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog
-from detectron2.engine import DefaultPredictor
 from phalp.deep_sort_ import nn_matching
 from phalp.deep_sort_.detection import Detection
 from phalp.deep_sort_.tracker import Tracker
 from phalp.models.hmar import HMAR
-from phalp.utils import get_pylogger
-from phalp.utils.utils import (FrameExtractor, convert_pkl,
+from phalp.phalp_utils import get_pylogger
+from phalp.phalp_utils.utils import (FrameExtractor, convert_pkl,
                                get_prediction_interval)
-from phalp.utils.utils_dataset import process_image, process_mask
-from phalp.utils.utils_detectron2 import DefaultPredictor_Lazy
-from phalp.utils.utils_scenedetect import detect
+from phalp.phalp_utils.utils_dataset import process_image, process_mask
+from phalp.phalp_utils.utils_detectron2 import DefaultPredictor_Lazy
+from phalp.phalp_utils.utils_scenedetect import detect
 from phalp.visualize.visualizer import Visualizer
 from pycocotools import mask as mask_utils
 from pytube import YouTube
@@ -91,7 +89,7 @@ class PHALP(nn.Module):
         log.info("Setting up Visualizer...")
         self.visualizer = Visualizer(self.cfg, self.HMAR)
         
-    def track(self):
+    def track(self, dataset):
         
         eval_keys       = ['tracked_ids', 'tracked_bbox', 'tid', 'bbox', 'tracked_time']
         history_keys    = ['appe', 'loca', 'pose', 'uv'] if self.cfg.render.enable else []
@@ -110,7 +108,8 @@ class PHALP(nn.Module):
         
         # process the source video and return a list of frames
         # source can be a video file, a youtube link or a image folder
-        list_of_frames, additional_data = self.get_frames_from_source()
+        # list_of_frames, additional_data = self.get_frames_from_source()
+        list_of_frames = dataset.img_paths
          
         # check if the video is already processed                                  
         if(not(self.cfg.overwrite) and os.path.isfile(self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq) + '.pkl')): return 0
@@ -118,23 +117,24 @@ class PHALP(nn.Module):
         log.info("Saving tracks at : " + self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq))
         
         # create subfolders for saving additional results
-        try:
-            os.makedirs(self.cfg.video.output_dir + '/results', exist_ok=True)  
-            os.makedirs(self.cfg.video.output_dir + '/_TMP', exist_ok=True)  
-        except: 
-            pass
+        os.makedirs(self.cfg.video.output_dir + '/phalp_results', exist_ok=True)  
+        # os.makedirs(self.cfg.video.output_dir + '/_TMP', exist_ok=True)
+        os.makedirs(os.path.join(self.cfg.video.output_dir, 'masks'), exist_ok=True)  
         
-    
         try: 
             
             list_of_frames = list_of_frames if self.cfg.phalp.start_frame==-1 else list_of_frames[self.cfg.phalp.start_frame:self.cfg.phalp.end_frame]
             list_of_shots = self.get_list_of_shots(list_of_frames)
-            
+
             tracked_frames = []
             final_visuals_dic = {}
+    
+            image_to_pids = {}
+            for (person, (img_name, pi_in_image)) in dataset.person_to_img.items():
+                image_to_pids.setdefault(img_name, []).append(person)
 
             for t_, frame_name in track(enumerate(list_of_frames), 
-                                        description="Tracking : " + self.cfg.video_seq, 
+                                        description="Tracking", 
                                         total=len(list_of_frames),
                                         disable=self.cfg.debug
                                         ):
@@ -152,11 +152,49 @@ class PHALP(nn.Module):
 
                 ############ detection ##############
                 pred_bbox, pred_masks, pred_scores, mask_names, gt = self.get_detections(image_frame, frame_name, t_)
+                print(frame_name)
+                print(pred_bbox)
+                # pred_masks: (1, 540, 960)
+                
+                # merge pred_masks
+                # mask_union = (np.sum(pred_masks, axis=0) > 0).astype(np.bool)
+                # cv2.imwrite(os.path.join(self.cfg.video.output_dir, 'masks', os.path.basename(frame_name)), 
+                #             mask_union.astype(np.uint8)*255)
+
+                # pids = image_to_pids[os.path.basename(frame_name)]
+                # pred_bbox = []
+                # pred_scores = []
+                # pred_masks = []
+                # mask_names = []
+                # gt = []
+                
+                # for pid in pids:
+                #     meta_info = dataset[pid]
+                #     keypoints = meta_info['keypoints']
+                #     keypoints = keypoints[keypoints[:, 2] > 0]
+                #     # find bbox for keypoints
+                #     bbox = np.array([np.min(keypoints[:, 0]), np.min(keypoints[:, 1]), np.max(keypoints[:, 0]), 
+                #                      np.max(keypoints[:, 1])])
+                #     pred_bbox.append(bbox)
+                #     pred_scores.append(1.)
+                #     # use bbox to crop mask
+                #     mask = np.zeros((img_height, img_width), dtype=np.uint8)
+                #     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 1
+                #     pred_masks.append(mask)
+                #     mask_names.append(1)
+                #     gt.append(1)
+                # pred_bbox = np.array(pred_bbox)
+                # pred_scores = np.array(pred_scores)
+                # mask_names = np.array(mask_names)
+                # gt = np.array(gt)
+                # pred_masks = np.array(pred_masks).astype(bool)
+
+                # print(pred_bbox)
                 
                 ############ HMAR ##############
                 detections = []
                 for bbox, mask, score, mask_name, gt_id in zip(pred_bbox, pred_masks, pred_scores, mask_names, gt):
-                    if bbox[2]-bbox[0]<50 or bbox[3]-bbox[1]<100: continue
+                    # if bbox[2]-bbox[0]<50 or bbox[3]-bbox[1]<100: continue
                     detection_data = self.get_human_features(image_frame, mask, bbox, score, frame_name, mask_name, t_, measurments, gt_id)
                     detections.append(Detection(detection_data))
 
@@ -208,22 +246,25 @@ class PHALP(nn.Module):
                     d_ = self.cfg.phalp.n_init+1 if(t_+1==len(list_of_frames)) else 1
                     for t__ in range(t_, t_+d_):
                         frame_key = list_of_frames[t__-self.cfg.phalp.n_init]
-                        rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])      
-                        if(t__-self.cfg.phalp.n_init in list_of_shots): cv2.rectangle(rendered_, (0,0), (f_size[0], f_size[1]), (0,0,255), 4)
+                        rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])
+                        # cv2.imwrite(os.path.join(self.cfg.video.output_dir, 'phalp_results', os.path.basename(frame_key)), rendered_)
+                         
+                        if(t__-self.cfg.phalp.n_init in list_of_shots): 
+                            cv2.rectangle(rendered_, (0,0), (f_size[0], f_size[1]), (0,0,255), 4)
                         if(t__-self.cfg.phalp.n_init==0):
-                            file_name = self.cfg.video.output_dir + '/PHALP_' + str(self.cfg.video_seq) + '_'+ str(self.cfg.experiment_name) + '.mp4'
-                            video_file = cv2.VideoWriter(file_name, cv2.VideoWriter_fourcc(*'mp4v'), 30, frameSize=f_size)
+                            file_name = self.cfg.video.output_dir + '/phalp_results/PHALP.mp4'
+                            video_file = cv2.VideoWriter(file_name, cv2.VideoWriter_fourcc(*'mp4v'), 1, frameSize=f_size)
                         video_file.write(rendered_)
                         del final_visuals_dic[frame_key]['frame']
                         for tkey_ in tmp_keys_:  del final_visuals_dic[frame_key][tkey_] 
 
-            joblib.dump(final_visuals_dic, self.cfg.video.output_dir + '/results/' + self.cfg.track_dataset + "_" + str(self.cfg.video_seq) + '.pkl')
-            if(self.cfg.use_gt): joblib.dump(self.tracker.tracked_cost, self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq) + '_' + str(self.cfg.start_frame) + '_distance.pkl')
+            joblib.dump(final_visuals_dic, self.cfg.video.output_dir + '/phalp_results/results.pkl')
+            if(self.cfg.use_gt): joblib.dump(self.tracker.tracked_cost, self.cfg.video.output_dir + '/phalp_results/' + str(self.cfg.start_frame) + '_distance.pkl')
             if(self.cfg.render.enable): video_file.release()
             
         except Exception as e: 
             print(e)
-            print(traceback.format_exc())     
+            print(traceback.format_exc())  
 
     def get_frames_from_source(self):
     

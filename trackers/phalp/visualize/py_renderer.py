@@ -1,6 +1,5 @@
 import os
 
-#os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
 import numpy as np
 import pyrender
 import torch
@@ -9,7 +8,6 @@ from torchvision.utils import make_grid
 
 
 def create_raymond_lights():
-    import pyrender
     thetas = np.pi * np.array([1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0])
     phis = np.pi * np.array([0.0, 2.0 / 3.0, 4.0 / 3.0])
     nodes = []

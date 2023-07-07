@@ -11,8 +11,8 @@ from phalp.models.heads.smpl_head import SMPLHead
 from phalp.models.joint_mapper import JointMapper, smpl_to_openpose
 from phalp.models.pose_transformer import Pose_transformer
 from phalp.models.smplx import create
-from phalp.utils.utils import *
-from phalp.utils.utils import perspective_projection
+from phalp.phalp_utils.utils import *
+from phalp.phalp_utils.utils import perspective_projection
 
 
 class HMAR(nn.Module):
