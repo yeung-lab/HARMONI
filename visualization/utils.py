@@ -32,7 +32,7 @@ def get_checkerboard_plane(plane_width=4, num_boxes=9, center=True):
 
     meshes = []
     for i in range(num_boxes):
-        for j in range(num_boxes//2, num_boxes):
+        for j in range(num_boxes):
             c = i * pw, j * pw
             ground = trimesh.primitives.Box(
                 center=[0, 0, -0.0001],

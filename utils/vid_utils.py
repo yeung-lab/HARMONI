@@ -1,13 +1,43 @@
+import os
+
+import cv2
+import requests
 from pytube import YouTube
 
-def download_video(save_path, video_id='aWV7UUMddCU'):
+def download_and_process_seedlings_sample(save_path, fps=1):
+    if not os.path.exists(save_path):
+        url = 'https://bergelsonlab.com/seedlings/images/30sMB.mp4'  # this is public at https://bergelsonlab.com/seedlings/
+        response = requests.get(url)
+        response.raise_for_status()  # Check for any errors during the request
+        with open(save_path, 'wb') as file:
+            file.write(response.content)
+
+    vid_name = os.path.splitext(os.path.basename(save_path))[0]
+    out_dir = os.path.join(os.path.split(save_path)[0], vid_name+'_fps'+str(fps))
+    os.makedirs(out_dir, exist_ok=True)
+
+    coord = [100,440,360,960]  # main view coord: y1,y2,x1,x2
+    vidcap = cv2.VideoCapture(save_path)
+    video_fps = round(vidcap.get(cv2.CAP_PROP_FPS))  # 30 for seedlings
+    print('Original video has fps', video_fps, '. Downsampling to fps', fps)
+    count = 0
+    while True:
+        vidcap.set(cv2.CAP_PROP_POS_MSEC, count*int(1000/fps))
+        success, image = vidcap.read()
+        if not success: break
+        # only keep the main view (i.g. take out the head cam views)
+        cropped_image = image[coord[0]:coord[1],coord[2]:coord[3]]
+        cv2.imwrite(os.path.join(out_dir, "frame_%08d.jpg" % count), cropped_image)
+        count += 1
+
+
+def download_youtube_video(save_path, video_id='aWV7UUMddCU'):
+    # TODO: not working. something wrong with pytube.
     video_url = f"https://www.youtube.com/watch?v={video_id}"
     print(video_url)
     yt = YouTube(video_url)
-    # video = yt.streams.get_highest_resolution()  # Get the highest resolution stream
-    # video = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
-    # video.download(output_path=save_path)
     yt.streams.get_highest_resolution().download(output_path=save_path, filename="youtube.mp4")
     
+
 if __name__ == '__main__':
-    download_video('./data/demo')
+    download_and_process_seedlings_sample('./data/demo/seedlings.mp4', fps=1)

@@ -15,13 +15,14 @@ from hps.body_model import init_body_model
 from utils.geometry import batch_euler2matrix
 from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera, rotation_matrix_between_vectors
 from visualization.keypoints import draw_skeleton
-
+from postprocess.filter_frames import keep_frame
 
 colors = get_colors()
 
 def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
            camera_center=np.array([960, 540]), img_list=None, fast_render=True, label_str=[''], use_smoothed=False,
-           add_ground_plane=False, anchor=None, ground_normal=None, top_view=False):
+           add_ground_plane=False, anchor=None, ground_normal=None, top_view=False,
+           keep_criterion='all'):
     """Generate meshes from the saved estimated SMPL parameters, and then render.
 
     anchor: a point on the ground plane
@@ -62,8 +63,11 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
         mesh_colors = []
         keypoints_2d = []
         camera_translations = []
-        body_types = []
         track_ids = []
+        body_types_for_this_image = [results.results[person_id]['model_type'] for person_id in persons]
+        if not keep_frame(body_types_for_this_image, keep_criterion):
+            continue
+        
         for person_id in persons:
             if person_id not in results.results: continue
             if use_smoothed:
@@ -71,11 +75,9 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
             else:
                 result = results.results[person_id]
             is_ghost = dataset[person_id]['is_ghost']
-            body_type = 'adult' if result['model_type'] == 'smplx' else 'infant'
             kp_2d = result['keypoints'][0,:25]
             pose, betas = to_tensor(result['body_pose']), to_tensor(result['betas'])
             global_orient = to_tensor(result['global_orient'])
-            body_types.append(body_type)
             faces.append(smpl_faces)
 
             if result['model_type'] == 'smpl':
@@ -271,7 +273,7 @@ def render_with_pyrender(
         scene.add(mesh, 'mesh'+str(idx))
 
     if add_ground_plane:
-        ground_trimesh = get_checkerboard_plane(plane_width=18, num_boxes=20)
+        ground_trimesh = get_checkerboard_plane(plane_width=10, num_boxes=10)
         pose = trimesh.transformations.rotation_matrix(np.radians(90), [1, 0, 0])  # (x,y,z) -> (x,-z,y)
        
         ground_rot_mtx = rotation_matrix_between_vectors(np.array([0, 1, 0]), ground_normal)

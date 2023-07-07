@@ -1,5 +1,6 @@
 from collections import defaultdict, Counter
 
+import numpy as np
 
 class Results(object):
     def __init__(self):
@@ -19,9 +20,9 @@ class Results(object):
             self.infant_bottom = defaultdict(list)
             self.cam_params = {}
         if body_type == 'adult':
-            self.adult_bottom[img_name].append(ankle_locations)
+            self.adult_bottom[img_name].extend(ankle_locations)
         elif body_type == 'infant':
-            self.infant_bottom[img_name].append(ankle_locations)
+            self.infant_bottom[img_name].extend(ankle_locations)
         else:
             raise Exception("body type {} not recognized".format(body_type))
         self.cam_params[img_name] = cam_params

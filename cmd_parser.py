@@ -23,8 +23,10 @@ def parse_config(argv=None):
 
     parser.add_argument('--hps', type=str, default='dapa', choices=['dapa'], help='The hps model being used')
     parser.add_argument('--run_smplify', default=False, action='store_true')
+    
     parser.add_argument('--ground_constraint', default=False, action='store_true')
     parser.add_argument('--ground_weight', type=float, default=100.0)
+    parser.add_argument('--ground_anchor', default='adult_bottom', choices=['adult_bottom', 'child_bottom'])
     parser.add_argument('--get_ground_normal_from', type=str, choices=['depth', 'user_input'], default='depth')
     parser.add_argument('--smplify_iters', type=int, default=10)
 
@@ -32,6 +34,8 @@ def parse_config(argv=None):
     parser.add_argument('--top_view', default=False, action='store_true')
     parser.add_argument('--save_video', default=False, action='store_true')
     parser.add_argument('--save_mesh', default=False, action='store_true')
+    parser.add_argument('--keep', default='all', 
+                        choices=['all', 'contains_child', 'contains_adult', 'contains_both'], help='Which results to keep')
     
     if argv:
         args = parser.parse_args(args=argv.split(' '))

@@ -8,6 +8,7 @@ Priority
 - [x] Get refinement with 2D keypoints working.
 - [x] Get ground plane constraint working.
 - Add downstream attributes extraction.
+- [x] Add customizable filters. (e.g. Filter out frames without 1 child and 1 adult during visualization, etc.)
 - Add preprocessing: tracking.
 - Add preprocessing: shot detection.
 - Add interactive correction.
@@ -26,9 +27,10 @@ Install conda environment.
 ./install.sh
 ```
 
-## Running HARMONI on a sample video
+## Running HARMONI on a folder of images
+Default flags are in `data/cfgs/harmoni.yaml`.
 ```bash
-python main.py --images data/demo/vid --hps dapa --out_folder ./results --render --use_cached_dataset --ground_constraint
+python main.py --images data/demo/vid --out_folder ./results --render --use_cached_dataset --ground_constraint
 
 Optional args:
 [--ground_constraint]

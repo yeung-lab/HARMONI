@@ -1,9 +1,8 @@
+from collections import defaultdict
 import os
 import os.path as osp
 import joblib
-import pickle
-import shutil
-import re
+import yaml
 
 import torch
 from torch.utils.data import DataLoader
@@ -43,7 +42,10 @@ def main(args):
     else:
         os.makedirs(out_folder, exist_ok=True)
 
-    shutil.copy(args.config, os.path.join(out_folder, 'config.yaml'))
+    # save args as config.yaml
+    with open(os.path.join(out_folder, 'config.yaml'), 'w') as f:
+        yaml.dump(vars(args), f)
+
     batch_size = args.batch_size
     device = 'cuda'
     
@@ -120,18 +122,27 @@ def main(args):
             # compute ankles per scene
             scene_to_mean_floor = {}
             for scene_id, ((scene_start, scene_end), normal_vec) in dataset.ground_normals.items():
-                adult_ankles = [
-                    results_holder.adult_bottom[dataset.img_names[frame_id]] 
-                    for frame_id in range(scene_start, scene_end) if dataset.img_names[frame_id] in results_holder.adult_bottom
+                if args.ground_anchor == 'adult_bottom':
+                    saved_ankles = results_holder.adult_bottom
+                else:
+                    saved_ankles = results_holder.infant_bottom
+                ankle_projections = [
+                    np.dot(np.array(saved_ankles[dataset.img_names[frame_id]]), normal_vec)
+                    for frame_id in range(scene_start, scene_end) if dataset.img_names[frame_id] in saved_ankles
                 ]
-                if len(adult_ankles) == 0: 
+                
+                if len(ankle_projections) == 0: 
                     scene_to_mean_floor[scene_id] = None
                     continue
-                ankle_projections = np.concatenate(adult_ankles).flatten()
+                ankle_projections = np.concatenate(ankle_projections).flatten()
                 mean = np.mean(ankle_projections)
                 std = np.std(ankle_projections)
                 mean_floor = np.mean(ankle_projections[np.abs(ankle_projections - mean) < std])  # filter out the outliers
-                scene_to_mean_floor[scene_id] = mean_floor * normal_vec#[[0,2,1]]  # location of the anchor ankle.
+                scene_to_mean_floor[scene_id] = mean_floor * normal_vec  # location of the anchor ankle.
+
+            # clear the saved ankles
+            results_holder.adult_bottom = defaultdict(list)
+            results_holder.infant_bottom = defaultdict(list)
         
         pidxs = dataset.track_to_id[track_id]
         body_type = dataset.track_body_types[track_id][0]
@@ -232,9 +243,10 @@ def main(args):
                 joints = joints @ rot_mtx - res['transl'][:, np.newaxis]
 
                 # project the left/right ankles onto the normal_vec (unit-norm)
-                left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())  # multiplying by normal_vec is done later.
-                right_ankle_projection = np.dot(joints[0, 14], normal_vec.cpu().numpy())
-                results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
+                # left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())  # multiplying by normal_vec is done later.
+                # right_ankle_projection = np.dot(joints[0, 14], normal_vec.cpu().numpy())
+                results_holder.update_scene(img_name, [joints[0, 11].tolist(), joints[0, 14].tolist()], cam_params, body_type)
+                # results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
                 
                     # pcd = o3d.geometry.PointCloud()
                     # pcd.points = o3d.utility.Vector3dVector(joints[0])
@@ -284,16 +296,22 @@ def main(args):
     logger.info('Saving '+ os.path.join(out_folder, 'results.pt'))
     joblib.dump(results_holder, os.path.join(out_folder, 'results.pt'))
 
+    # use the (mean) bottom of the baby or adult as the anchor for the ground plane
+    if args.ground_anchor == 'child_bottom':
+        anchor = np.concatenate([np.stack(ankles) for ankles in list(results_holder.infant_bottom.values())]).mean(0)
+    elif args.ground_anchor == 'adult_bottom':
+        anchor = np.concatenate([np.stack(ankles) for ankles in list(results_holder.adult_bottom.values())]).mean(0)
+
     if args.render:
         from visualization.pyrender import render
         render(
             dataset, results_holder, images_folder, out_render_path, cfg, cam_params, 
             skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
             camera_center=camera_center, img_list=None, 
-            fast_render=True, top_view=args.top_view, 
-            add_ground_plane=True, anchor=ground_y.cpu().numpy(), ground_normal=normal_vec.cpu().numpy())
+            fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
+            add_ground_plane=True, anchor=anchor, ground_normal=normal_vec.cpu().numpy())
 
-        if args.save_video:
+        if args.save_video:  # TODO: does not work if some frames are filetered out.
             cmd = [
                 'ffmpeg',
                 '-y',
