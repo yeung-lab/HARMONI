@@ -63,6 +63,17 @@ def images_to_gif(image_dir, gif_path, fps):
     imageio.mimsave(gif_path, images, duration=duration)
 
 
+def repeat_gif(gif_path, output_path, num_repeats):
+    with imageio.get_reader(gif_path) as reader:
+        frames = [frame for frame in reader]
+
+    repeated_frames = frames * num_repeats
+
+    with imageio.get_writer(output_path, mode='I', loop=0) as writer:
+        for frame in repeated_frames:
+            writer.append_data(frame)
+
+
 def video_to_images(vid_path, save_path):
     ext = os.path.splitext(vid_path)[1]
     if ext == '.gif':
@@ -72,4 +83,5 @@ def video_to_images(vid_path, save_path):
 
 
 if __name__ == '__main__':
-    download_and_process_seedlings_sample('./data/demo/seedlings.mp4', fps=1)
+    # download_and_process_seedlings_sample('./data/demo/seedlings.mp4', fps=1)
+    repeat_gif('./teasers/video.gif', './teasers/video_repeated.gif', num_repeats=3)

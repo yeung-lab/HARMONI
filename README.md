@@ -2,7 +2,7 @@
 
 ## Current results
 <p float="center">
-  <img src="teasers/video.gif" width="50%" />
+  <img src="teasers/video_repeated.gif" width="50%" />
 </p>
 
 
@@ -81,6 +81,5 @@ Output folder structure
 
 ## Related Resources
 We borrowed code from the below amazing resources:
-- [ControlNet](https://github.com/lllyasviel/ControlNet) for OpenPose.
 - [PARE](https://github.com/mkocabas/PARE) for HMR-related helpers.
-- MiDaS, Panoptic DeepLab, etc...
+- MiDaS, Panoptic DeepLab, ControlNet, OpenPose, etc...
