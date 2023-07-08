@@ -3,7 +3,7 @@ Modified code from https://github.com/nwojke/deep_sort
 """
 
 import copy
-from collections import deque
+from collections import deque, defaultdict
 
 import numpy as np
 import scipy.signal as signal

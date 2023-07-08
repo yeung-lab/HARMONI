@@ -3,6 +3,8 @@ import os
 import cv2
 import requests
 from pytube import YouTube
+from PIL import Image
+import imageio
 
 def download_and_process_seedlings_sample(save_path, fps=1):
     if not os.path.exists(save_path):
@@ -38,6 +40,36 @@ def download_youtube_video(save_path, video_id='aWV7UUMddCU'):
     yt = YouTube(video_url)
     yt.streams.get_highest_resolution().download(output_path=save_path, filename="youtube.mp4")
     
+
+def gif_to_images(gif_path, output_path):
+    with Image.open(gif_path) as im:
+        frames = []
+        for frame_index in range(im.n_frames):
+            im.seek(frame_index)
+            frames.append(im.copy().convert("RGB"))
+
+    for index, frame in enumerate(frames):
+        frame.save(os.path.join(output_path, "frame_%08d.png" % index), **frame.info)
+
+
+def images_to_gif(image_dir, gif_path, fps):
+    images = []
+    for filename in sorted(os.listdir(image_dir)):
+        if filename.endswith(".png"):
+            images.append(imageio.imread(os.path.join(image_dir, filename)))
+    
+    # `fps=50` == `duration=20` (1000 * 1/50).
+    duration = 1000 * 1/fps
+    imageio.mimsave(gif_path, images, duration=duration)
+
+
+def video_to_images(vid_path, save_path):
+    ext = os.path.splitext(vid_path)[1]
+    if ext == '.gif':
+        gif_to_images(vid_path, save_path)
+    elif ext == '.mp4':
+        raise NotImplementedError()
+
 
 if __name__ == '__main__':
     download_and_process_seedlings_sample('./data/demo/seedlings.mp4', fps=1)

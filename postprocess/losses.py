@@ -152,14 +152,14 @@ def loss_ground_plane(anchor, normal, point1, point2):
     point2_cos_theta = torch.matmul(point_to_anchor, normal[:, None]).sum(1)
     point2_gp_loss = torch.abs(point2_cos_theta)  # cos_theta is 0 if two vectors are perpendicular
 
-    gp_loss = torch.min(point1_gp_loss, point2_gp_loss)
+    gp_loss = torch.min(point1_gp_loss, point2_gp_loss) * 100
 
     # penalize if cos_theta is positive (above the ground plane). it makes the feet a little bit below the ground.
     # Note: this is not the same as before (i.e. encourange vectors to be perpendicular), but works better.
     point1_gp_lossabove_loss = torch.max(torch.zeros_like(point1_cos_theta), point1_cos_theta) * (1000)
     point2_gp_lossabove_loss = torch.max(torch.zeros_like(point2_cos_theta), point2_cos_theta) * (1000)
 
-    gp_loss = point1_gp_lossabove_loss + point2_gp_lossabove_loss
+    gp_loss = gp_loss # + point1_gp_lossabove_loss + point2_gp_lossabove_loss
 
     return gp_loss
 
@@ -241,7 +241,7 @@ def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_
 
     # Smooth 3d joint loss
     joints_3d_diff = model_joints[1:] - model_joints[:-1]
-    # joints_3d_diff = joints_3d_diff * 100.
+    joints_3d_diff = joints_3d_diff * 100.
     smooth_j3d_loss = (joint_conf_diff ** 2) * joints_3d_diff.abs().sum(dim=-1)
     smooth_j3d_loss = torch.cat(
         [torch.zeros(1, smooth_j3d_loss.shape[1], device=body_pose.device), smooth_j3d_loss]

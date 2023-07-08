@@ -3,16 +3,8 @@ defaults:
   - override hydra/job_logging: none #colorlog
   - override hydra/hydra_logging: none #colorlog
 
-# paths: 
-#   output_dir: ./results/vid
-
-# hydra:
-#   run:
-#     dir: ./results/vid
-
 video:
-  source: ./data/demo/vid.mp4
-  output_dir: results/vid
+  # source: ./data/demo/vid.mp4
   start_frame: 0
   end_frame: 10
   output_resolution: 1440
@@ -30,8 +22,8 @@ phalp:
   past_lookback: 1
   detection_type: mask
   shot: 0
-  start_frame: 0
-  end_frame: 10
+  start_frame: -1
+  end_frame: 10 # this would use all frames.
 
 render:
   enable: True

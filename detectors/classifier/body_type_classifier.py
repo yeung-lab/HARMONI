@@ -38,9 +38,7 @@ class BodyTypeClassifier():
                 save_samples=True, sample_num=20):
         if save_samples:
             sample_folder = os.path.join(out_folder, 'sampled_tracks')
-            if os.path.exists(sample_folder):
-                shutil.rmtree(sample_folder)
-            os.makedirs(sample_folder)
+            os.makedirs(sample_folder, exist_ok=True)
         
         track_id_to_type = {}
         for track_id, detections in tqdm(track_id_to_detections.items()):
@@ -88,9 +86,9 @@ class BodyTypeClassifier():
                     mean_torso_area = np.mean([t['bbox'][2]*t['bbox'][3] for t in detections])
 
                 if pred_counter[self.label_dict['adult']]/ len(sampled_idxs) >= 0.5: # if majority of the predictions says adult, then it's adult
-                    track_id_to_type[track_id] = ('adult', adult_mean_prob, infant_mean_prob, mean_torso_area)
+                    track_id_to_type[track_id] = ['adult', adult_mean_prob, infant_mean_prob, mean_torso_area]
                 else:
-                    track_id_to_type[track_id] = ('infant', adult_mean_prob, infant_mean_prob, mean_torso_area)
+                    track_id_to_type[track_id] = ['infant', adult_mean_prob, infant_mean_prob, mean_torso_area]
 
             else:
                 class_id = None

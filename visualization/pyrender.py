@@ -64,12 +64,13 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
         keypoints_2d = []
         camera_translations = []
         track_ids = []
-        body_types_for_this_image = [results.results[person_id]['model_type'] for person_id in persons]
+        body_types_for_this_image = [results.results[person_id]['model_type'] for person_id in persons if person_id in results.results]
         if not keep_frame(body_types_for_this_image, keep_criterion):
             continue
         
         for person_id in persons:
             if person_id not in results.results: continue
+            
             if use_smoothed:
                 result = results.smoothed_results[person_id]
             else:
@@ -203,7 +204,7 @@ def render_image_group(
             R, G, B = list(colors[color])
             openpose_conf = round(kp_2d[:,2].mean(), 2) * 100
             images_save = cv2.putText(
-                images_save, f'Track id: {track_ids[i]}. OpenPose Conf: {openpose_conf} %', (image.shape[1], 70+i*30), 
+                images_save, f'Track id: {track_ids[i]}. OpenPose Conf: {openpose_conf} %', (10, 70+i*30), 
                 cv2.FONT_HERSHEY_TRIPLEX, 1, (int(R), int(G), int(B)), 2)
        
         for i, text in enumerate(desc):
@@ -211,7 +212,6 @@ def render_image_group(
                 images_save, text, (image.shape[1]+700, 20 + i*30), 
                 cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 0),2)
 
-        # images_save = cv2.resize(images_save, (1920, 540))
         cv2.imwrite(save_filename, cv2.cvtColor(images_save, cv2.COLOR_BGR2RGB))
 
     return output_img

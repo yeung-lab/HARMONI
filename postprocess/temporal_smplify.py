@@ -201,7 +201,6 @@ class TemporalSMPLify():
                                          focal_length=self.focal_length,
                                          ground_y=ground_y, ground_normal=ground_normal, ground_weight=self.ground_weight*0.1
                                          )
-                # print('Body loss: {}'.format(loss.item()))
                 body_optimizer.zero_grad()
                 loss.backward()
                 body_optimizer.step()

@@ -1,6 +1,6 @@
 import glob
 import os
-import time
+from collections import defaultdict
 import traceback
 import warnings
 os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
@@ -96,7 +96,8 @@ class PHALP(nn.Module):
         prediction_keys = ['prediction_uv', 'prediction_pose', 'prediction_loca'] if self.cfg.render.enable else []
         extra_keys_1    = ['center', 'scale', 'size', 'img_path', 'img_name', 'mask_name', 'conf']
         extra_keys_2    = ['smpl', 'camera', '3d_joints', 'embedding', 'mask']
-        history_keys    = history_keys + extra_keys_1 + extra_keys_2
+        extra_keys_3    = ['person_id']
+        history_keys    = history_keys + extra_keys_1 + extra_keys_2 + extra_keys_3
         visual_store_   = eval_keys + history_keys + prediction_keys
         tmp_keys_       = ['uv', 'prediction_uv', 'prediction_pose', 'prediction_loca']
         
@@ -110,11 +111,12 @@ class PHALP(nn.Module):
         # source can be a video file, a youtube link or a image folder
         # list_of_frames, additional_data = self.get_frames_from_source()
         list_of_frames = dataset.img_paths
+        track_to_id, id_to_track = defaultdict(list), {}
          
         # check if the video is already processed                                  
-        if(not(self.cfg.overwrite) and os.path.isfile(self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq) + '.pkl')): return 0
+        if(not(self.cfg.overwrite) and os.path.isfile(self.cfg.video.output_dir + '/phalp_results/' + str(self.cfg.video_seq) + '.pkl')): return 0
         
-        log.info("Saving tracks at : " + self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq))
+        log.info("Saving tracks at : " + self.cfg.video.output_dir + '/phalp_results/' + str(self.cfg.video_seq))
         
         # create subfolders for saving additional results
         os.makedirs(self.cfg.video.output_dir + '/phalp_results', exist_ok=True)  
@@ -152,50 +154,52 @@ class PHALP(nn.Module):
 
                 ############ detection ##############
                 pred_bbox, pred_masks, pred_scores, mask_names, gt = self.get_detections(image_frame, frame_name, t_)
-                print(frame_name)
-                print(pred_bbox)
+                # print(frame_name)
+                # print(pred_bbox)
                 # pred_masks: (1, 540, 960)
                 
                 # merge pred_masks
-                # mask_union = (np.sum(pred_masks, axis=0) > 0).astype(np.bool)
-                # cv2.imwrite(os.path.join(self.cfg.video.output_dir, 'masks', os.path.basename(frame_name)), 
-                #             mask_union.astype(np.uint8)*255)
+                mask_union = (np.sum(pred_masks, axis=0) > 0).astype(np.bool)
+                cv2.imwrite(os.path.join(self.cfg.video.output_dir, 'masks', os.path.basename(frame_name)), 
+                            mask_union.astype(np.uint8)*255)
 
-                # pids = image_to_pids[os.path.basename(frame_name)]
-                # pred_bbox = []
-                # pred_scores = []
-                # pred_masks = []
-                # mask_names = []
-                # gt = []
+                pids = image_to_pids[os.path.basename(frame_name)]
+                pred_bbox = []
+                pred_scores = []
+                pred_masks = []
+                mask_names = []
+                gt = []
+                person_ids = []
                 
-                # for pid in pids:
-                #     meta_info = dataset[pid]
-                #     keypoints = meta_info['keypoints']
-                #     keypoints = keypoints[keypoints[:, 2] > 0]
-                #     # find bbox for keypoints
-                #     bbox = np.array([np.min(keypoints[:, 0]), np.min(keypoints[:, 1]), np.max(keypoints[:, 0]), 
-                #                      np.max(keypoints[:, 1])])
-                #     pred_bbox.append(bbox)
-                #     pred_scores.append(1.)
-                #     # use bbox to crop mask
-                #     mask = np.zeros((img_height, img_width), dtype=np.uint8)
-                #     mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 1
-                #     pred_masks.append(mask)
-                #     mask_names.append(1)
-                #     gt.append(1)
-                # pred_bbox = np.array(pred_bbox)
-                # pred_scores = np.array(pred_scores)
-                # mask_names = np.array(mask_names)
-                # gt = np.array(gt)
-                # pred_masks = np.array(pred_masks).astype(bool)
-
-                # print(pred_bbox)
+                for pid in pids:
+                    detection = dataset.person_to_det[pid]
+                    keypoints = detection.get("keypoints_25", np.zeros((25, 3)))  # (25, 3)
+                    keypoints = keypoints[keypoints[:, 2] > 0]
+                    # find bbox for keypoints
+                    bbox = np.array([np.min(keypoints[:, 0]), np.min(keypoints[:, 1]), np.max(keypoints[:, 0]), 
+                                     np.max(keypoints[:, 1])])
+                    pred_bbox.append(bbox)
+                    pred_scores.append(1.)
+                    # use bbox to crop mask
+                    mask = np.zeros((img_height, img_width), dtype=np.uint8)
+                    mask[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = 1
+                    pred_masks.append(mask)
+                    mask_names.append(1)
+                    gt.append(1)
+                    person_ids.append(pid)
+                pred_bbox = np.array(pred_bbox)
+                pred_scores = np.array(pred_scores)
+                mask_names = np.array(mask_names)
+                gt = np.array(gt)
+                pred_masks = np.array(pred_masks).astype(bool)
+                person_ids = np.array(person_ids)
                 
                 ############ HMAR ##############
                 detections = []
-                for bbox, mask, score, mask_name, gt_id in zip(pred_bbox, pred_masks, pred_scores, mask_names, gt):
+                for bbox, mask, score, mask_name, gt_id, person_id in zip(pred_bbox, pred_masks, pred_scores, mask_names, gt, person_ids):
                     # if bbox[2]-bbox[0]<50 or bbox[3]-bbox[1]<100: continue
-                    detection_data = self.get_human_features(image_frame, mask, bbox, score, frame_name, mask_name, t_, measurments, gt_id)
+                    detection_data = self.get_human_features(image_frame, mask, bbox, score, frame_name, mask_name, t_, 
+                                                             measurments, person_id, gt_id)
                     detections.append(Detection(detection_data))
 
                 ############ tracking ##############
@@ -247,6 +251,11 @@ class PHALP(nn.Module):
                     for t__ in range(t_, t_+d_):
                         frame_key = list_of_frames[t__-self.cfg.phalp.n_init]
                         rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])
+
+                        for track_id_, pid_ in zip(final_visuals_dic[frame_key]['tid'], 
+                                                   final_visuals_dic[frame_key]['person_id']):
+                            track_to_id[track_id_].append(pid_)
+                            id_to_track[pid_] = track_id_
                         # cv2.imwrite(os.path.join(self.cfg.video.output_dir, 'phalp_results', os.path.basename(frame_key)), rendered_)
                          
                         if(t__-self.cfg.phalp.n_init in list_of_shots): 
@@ -265,6 +274,9 @@ class PHALP(nn.Module):
         except Exception as e: 
             print(e)
             print(traceback.format_exc())  
+            raise e
+
+        return track_to_id, id_to_track
 
     def get_frames_from_source(self):
     
@@ -335,7 +347,7 @@ class PHALP(nn.Module):
 
         return pred_bbox, pred_masks, pred_scores, mask_names, ground_truth
 
-    def get_human_features(self, image, seg_mask, bbox, score, frame_name, mask_name, t_, measurments, gt=1):
+    def get_human_features(self, image, seg_mask, bbox, score, frame_name, mask_name, t_, measurments, person_id, gt=1):
         
         img_height, img_width, new_image_size, left, top = measurments                
         
@@ -409,6 +421,7 @@ class PHALP(nn.Module):
                               "img_name"        : frame_name.split('/')[-1],
                               "mask_name"       : mask_name,
                               "ground_truth"    : gt,
+                              "person_id"       : person_id,
                               "time"            : t_,
                          }
         

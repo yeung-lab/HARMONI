@@ -19,7 +19,9 @@ def parse_config(argv=None):
     parser.add_argument('--use_cached_dataset', default=False, action='store_true')
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--camera_focal', type=int, default=2000)
+    parser.add_argument('--dryrun', default=False, action='store_true')
     parser.add_argument('--tracker_type', type=str, default='phalp', choices=['phalp', 'dummy'])
+    parser.add_argument('--track_overwrite', type=str, default='{}', help='Overwrite the tracking results. e.g. {4: `adult`}')
 
     parser.add_argument('--hps', type=str, default='dapa', choices=['dapa'], help='The hps model being used')
     parser.add_argument('--run_smplify', default=False, action='store_true')
@@ -30,12 +32,15 @@ def parse_config(argv=None):
     parser.add_argument('--get_ground_normal_from', type=str, choices=['depth', 'user_input'], default='depth')
     parser.add_argument('--smplify_iters', type=int, default=10)
 
+    parser.add_argument('--render_only', default=False, action='store_true', help='Only render the results')
     parser.add_argument('--render', default=False, action='store_true')
     parser.add_argument('--top_view', default=False, action='store_true')
     parser.add_argument('--save_video', default=False, action='store_true')
+    parser.add_argument('--save_gif', default=False, action='store_true')
     parser.add_argument('--save_mesh', default=False, action='store_true')
     parser.add_argument('--keep', default='all', 
-                        choices=['all', 'contains_child', 'contains_adult', 'contains_both'], help='Which results to keep')
+                        choices=['all', 'contains_child', 'contains_adult', 'contains_both',
+                                 'contains_only_both'], help='Which results to keep')
     
     if argv:
         args = parser.parse_args(args=argv.split(' '))

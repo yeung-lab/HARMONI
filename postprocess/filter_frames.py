@@ -5,6 +5,9 @@ def keep_frame(result, filter_rule='contains_child'):
     if filter_rule == 'contains_both':
         return exists_child(result) and exists_adult(result)
     
+    elif filter_rule == 'contains_only_both':
+        return child_count(result) == 1 and adult_count(result) == 1
+    
     elif filter_rule == 'contains_child':
         return exists_child(result)
     
@@ -23,3 +26,11 @@ def exists_adult(results):
 
 def exists_child(results):
     return 'smil' in results
+
+def child_count(results):
+    return sum([1 for r in results if r == 'smil'])
+
+def adult_count(results):
+    return sum([1 for r in results if r == 'smpl'])
+
+

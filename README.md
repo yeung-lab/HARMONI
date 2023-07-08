@@ -1,5 +1,9 @@
 # HARMONI: Using 3D Computer Vision and Audio Analysis to Quantify Caregiver–Child Behavior and Interaction from Videos
 
+## Current results
+<p float="center">
+  <img src="teasers/video.gif" width="50%" />
+</p>
 
 
 ## Dev plan
@@ -9,9 +13,9 @@ Priority
 - [x] Get ground plane constraint working.
 - Add downstream attributes extraction.
 - [x] Add customizable filters. (e.g. Filter out frames without 1 child and 1 adult during visualization, etc.)
-- Add preprocessing: tracking.
+- [x] Add preprocessing: phalp tracking.
 - Add preprocessing: shot detection.
-- Add interactive correction.
+- Allow for user correction.
 
 Later
 - audio
@@ -77,5 +81,6 @@ Output folder structure
 
 ## Related Resources
 We borrowed code from the below amazing resources:
-- [ControlNet](https://github.com/lllyasviel/ControlNet) for OpenPose and MiDaS api.
+- [ControlNet](https://github.com/lllyasviel/ControlNet) for OpenPose.
 - [PARE](https://github.com/mkocabas/PARE) for HMR-related helpers.
+- MiDaS, Panoptic DeepLab, etc...

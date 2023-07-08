@@ -1,19 +1,18 @@
-import os, sys, json
+import os, sys, pickle
 from glob import glob
-from collections import defaultdict, Counter
+from collections import defaultdict
 
-from loguru import logger
 import cv2
+from loguru import logger
 from torch.utils import data
-
-import pickle
 import numpy as np
+import omegaconf
 
 from detectors.classifier import BodyTypeClassifier
-from detectors.openpose import run_on_images as run_openpose
-
-from utils.img_utils import cropout_openpose_one_third, default_img_transform, crop
 from detectors.ground_normal.get_ground_normal import compute
+from detectors.openpose import run_on_images as run_openpose
+from utils.img_utils import cropout_openpose_one_third, default_img_transform, crop
+
 
 class Dataset(data.Dataset):
     """ Holds images, 2D keypoints, their predicted body types (infant vs. adult) and additional info.
@@ -51,27 +50,22 @@ class Dataset(data.Dataset):
                 }
                 num_persons += 1
 
-        track_to_id, id_to_track, track_id_to_detections = self.run_tracking(person_to_det, tracker_type=tracker_type)
         body_type_classifier = BodyTypeClassifier(cfg.body_type_classifier_path)
-        track_body_types = body_type_classifier(track_id_to_detections, self.img_folder, out_folder, classifier=None)
         
         self.num_persons = num_persons
         self.num_ghost_detections = 0
         self.person_to_img = person_to_img  # mapping from person id to img name and person index within the image
         self.img_to_img_id = img_to_img_id
         self.person_to_det = person_to_det
+        self.transform = default_img_transform()
+        
+        track_to_id, id_to_track, track_id_to_detections = self.run_tracking(person_to_det, tracker_type=tracker_type)
+        track_body_types = body_type_classifier(track_id_to_detections, self.img_folder, out_folder, classifier=None)
         self.track_to_id = track_to_id  # mapping from track id to list of person ids. Used in main fitting loop.
         self.id_to_track = id_to_track
         self.track_body_types = track_body_types
         
-        self.transform = default_img_transform()
-
-        self.track_body_types = track_body_types
-        print(track_body_types)
         self.print_info()
-
-    def run_openpose(self):
-        from detectors.openpose import OpenPoseDetector
 
     def run_tracking(self, person_to_det, tracker_type):
         if tracker_type == 'dummy':
@@ -86,7 +80,16 @@ class Dataset(data.Dataset):
                 track_id_to_detections[track_id].append(person_to_det[person_id])
 
         elif tracker_type == 'phalp':
-            self.run_phalp() # TODO: implement this
+            sys.path.append(os.path.abspath("./trackers"))
+            from trackers.phalp import PHALP
+            cfg = omegaconf.OmegaConf.load(os.path.abspath("./trackers/phalp_config.yaml"))
+            cfg.video.output_dir = self.out_folder
+            phalp_tracker = PHALP(cfg)
+            track_to_id, id_to_track = phalp_tracker.track(self)
+            track_id_to_detections = defaultdict(list)
+            for track_id, person_ids in track_to_id.items():
+                for person_id in person_ids:
+                    track_id_to_detections[track_id].append(person_to_det[person_id])
         else:
             raise NotImplementedError(f'Unknown tracker type: {tracker_type}')
 
