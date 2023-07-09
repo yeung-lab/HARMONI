@@ -14,5 +14,3 @@ pip install gdown
 pip install cython scikit-learn==0.22 scipy==1.9.0
 pip install rich dill colordict scenedetect[opencv]
 pip install hydra-core hydra-colorlog
-
-# need to comment out osmesa /pasteur/u/zzweng/miniconda3/envs/harmoni/lib/python3.9/site-packages/phalp/visualize/py_renderer.py

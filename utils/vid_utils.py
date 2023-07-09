@@ -41,6 +41,21 @@ def download_youtube_video(save_path, video_id='aWV7UUMddCU'):
     yt.streams.get_highest_resolution().download(output_path=save_path, filename="youtube.mp4")
     
 
+def mp4_to_images(file_path, save_path, fps=1):
+    os.makedirs(save_path, exist_ok=True)
+
+    vidcap = cv2.VideoCapture(file_path)
+    video_fps = round(vidcap.get(cv2.CAP_PROP_FPS))
+    print('Original video has fps', video_fps, '. Downsampling to fps', fps)
+    count = 0
+    while True:
+        vidcap.set(cv2.CAP_PROP_POS_MSEC, count*int(1000/fps))
+        success, image = vidcap.read()
+        if not success: break
+        cv2.imwrite(os.path.join(save_path, "frame_%08d.jpg" % count), image)
+        count += 1
+
+
 def gif_to_images(gif_path, output_path):
     with Image.open(gif_path) as im:
         frames = []
@@ -79,6 +94,8 @@ def video_to_images(vid_path, save_path):
     if ext == '.gif':
         gif_to_images(vid_path, save_path)
     elif ext == '.mp4':
+        mp4_to_images(vid_path, save_path)
+    else:
         raise NotImplementedError()
 
 
