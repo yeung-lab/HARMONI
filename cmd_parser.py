@@ -13,6 +13,9 @@ def parse_config(argv=None):
     
     parser.add_argument('--images', type=str, default='', help='Path to the input images folder')
     parser.add_argument('--video', type=str, default='', help='Path to the input video')
+    parser.add_argument('--start_frame', type=int, default=0, help='Start frame of the input video')
+    parser.add_argument('--end_frame', type=int, default=100, help='End frame of the input video')
+    
     parser.add_argument('--out_folder', type=str, default='', help='Where the results are saved')
     parser.add_argument('--fps', type=int, default=1, help='FPS of the input video')
     
@@ -20,19 +23,22 @@ def parse_config(argv=None):
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--camera_focal', type=int, default=2000)
     parser.add_argument('--dryrun', default=False, action='store_true')
-    parser.add_argument('--tracker_type', type=str, default='phalp', choices=['phalp', 'dummy'])
+    parser.add_argument('--tracker_type', type=str, default='phalp', choices=['phalp', 'dummy'], 
+                        help='If dummy, each person is a track.')
     parser.add_argument('--track_overwrite', type=str, default='{}', help='Overwrite the tracking results. e.g. {4: `adult`}')
 
-    parser.add_argument('--hps', type=str, default='dapa', choices=['dapa'], help='The hps model being used')
-    parser.add_argument('--run_smplify', default=False, action='store_true')
+    parser.add_argument('--hps', type=str, default='dapa', choices=['dapa'], 
+                        help='The hps model being used')
     
+    parser.add_argument('--run_smplify', default=False, action='store_true')
     parser.add_argument('--ground_constraint', default=False, action='store_true')
-    parser.add_argument('--ground_weight', type=float, default=100.0)
+    parser.add_argument('--ground_weight', type=float, default=500.0)
     parser.add_argument('--ground_anchor', default='adult_bottom', choices=['adult_bottom', 'child_bottom'])
-    parser.add_argument('--get_ground_normal_from', type=str, choices=['depth', 'user_input'], default='depth')
+    # parser.add_argument('--get_ground_normal_from', type=str, choices=['depth', 'user_input'], default='depth')
     parser.add_argument('--smplify_iters', type=int, default=10)
 
-    parser.add_argument('--render_only', default=False, action='store_true', help='Only render the results')
+    parser.add_argument('--render_only', default=False, action='store_true', 
+                        help='Only render the results. Assuming there is already a results.pt file in the result folder.')
     parser.add_argument('--render', default=False, action='store_true')
     parser.add_argument('--top_view', default=False, action='store_true')
     parser.add_argument('--save_video', default=False, action='store_true')

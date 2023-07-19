@@ -121,7 +121,7 @@ class PHALP(nn.Module):
         # create subfolders for saving additional results
         os.makedirs(self.cfg.video.output_dir + '/phalp_results', exist_ok=True)  
         # os.makedirs(self.cfg.video.output_dir + '/_TMP', exist_ok=True)
-        os.makedirs(os.path.join(self.cfg.video.output_dir, 'masks'), exist_ok=True)  
+        # os.makedirs(os.path.join(self.cfg.video.output_dir, 'masks'), exist_ok=True)  
         
         try: 
             
@@ -159,11 +159,11 @@ class PHALP(nn.Module):
                 # pred_masks: (1, 540, 960)
                 
                 # merge pred_masks
-                mask_union = (np.sum(pred_masks, axis=0) > 0).astype(np.bool)
-                cv2.imwrite(os.path.join(self.cfg.video.output_dir, 'masks', os.path.basename(frame_name)), 
-                            mask_union.astype(np.uint8)*255)
+                # mask_union = (np.sum(pred_masks, axis=0) > 0).astype(np.bool)
+                # cv2.imwrite(os.path.join(self.cfg.video.output_dir, 'masks', os.path.basename(frame_name)), 
+                #             mask_union.astype(np.uint8)*255)
 
-                pids = image_to_pids[os.path.basename(frame_name)]
+                pids = image_to_pids.get(os.path.basename(frame_name), [])
                 pred_bbox = []
                 pred_scores = []
                 pred_masks = []

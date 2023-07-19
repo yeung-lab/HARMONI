@@ -41,19 +41,23 @@ def download_youtube_video(save_path, video_id='aWV7UUMddCU'):
     yt.streams.get_highest_resolution().download(output_path=save_path, filename="youtube.mp4")
     
 
-def mp4_to_images(file_path, save_path, fps=1):
+def mp4_to_images(file_path, save_path, start_frame=0, end_frame=100, fps=1):
     os.makedirs(save_path, exist_ok=True)
 
     vidcap = cv2.VideoCapture(file_path)
     video_fps = round(vidcap.get(cv2.CAP_PROP_FPS))
     print('Original video has fps', video_fps, '. Downsampling to fps', fps)
-    count = 0
-    while True:
-        vidcap.set(cv2.CAP_PROP_POS_MSEC, count*int(1000/fps))
-        success, image = vidcap.read()
+    every_x_frame = video_fps // fps
+    frame_cnt = 0; img_cnt = 0
+    while vidcap.isOpened():
+        success,image = vidcap.read()
         if not success: break
-        cv2.imwrite(os.path.join(save_path, "frame_%08d.jpg" % count), image)
-        count += 1
+        if frame_cnt % every_x_frame == 0 and frame_cnt > start_frame and frame_cnt < end_frame:
+            cv2.imwrite(os.path.join(save_path, "frame_%08d.jpg" % img_cnt), image)
+            img_cnt += 1
+        frame_cnt += 1
+    vidcap.release()
+    cv2.destroyAllWindows()
 
 
 def gif_to_images(gif_path, output_path):
@@ -70,7 +74,7 @@ def gif_to_images(gif_path, output_path):
 def images_to_gif(image_dir, gif_path, fps):
     images = []
     for filename in sorted(os.listdir(image_dir)):
-        if filename.endswith(".png"):
+        if filename.endswith(".png") and not filename.startswith("."):
             images.append(imageio.imread(os.path.join(image_dir, filename)))
     
     # `fps=50` == `duration=20` (1000 * 1/50).
@@ -89,12 +93,21 @@ def repeat_gif(gif_path, output_path, num_repeats):
             writer.append_data(frame)
 
 
-def video_to_images(vid_path, save_path):
+def images_to_mp4(image_dir, vid_path, fps):
+    vid = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (960, 440))
+    for filename in sorted(os.listdir(image_dir)):
+        if filename.endswith(".png") and not filename.startswith("."):
+            image = cv2.imread(os.path.join(image_dir, filename))
+            vid.write(image)
+    vid.release()
+
+
+def video_to_images(vid_path, save_path, **kwargs):
     ext = os.path.splitext(vid_path)[1]
     if ext == '.gif':
         gif_to_images(vid_path, save_path)
     elif ext == '.mp4':
-        mp4_to_images(vid_path, save_path)
+        mp4_to_images(vid_path, save_path, **kwargs)
     else:
         raise NotImplementedError()
 

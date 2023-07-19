@@ -31,7 +31,9 @@ class Dataset(data.Dataset):
         logger.info(f'Camera center: {self.camera_center}')
 
         os.makedirs(os.path.join(out_folder, 'openpose'), exist_ok=True)
-        results = run_openpose(self.img_paths, hand=False, vis_path=os.path.join(out_folder, 'openpose'))
+        results = run_openpose(self.img_paths, hand=False, 
+                            #    vis_path=os.path.join(out_folder, 'openpose')
+                               )
         
         num_persons = 0
         person_to_img = {}  # {pid: [img_name, person_index]}

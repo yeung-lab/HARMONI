@@ -1,15 +1,8 @@
-# vid=seedlings_fps1
-# python main.py --images data/demo/${vid} --out_folder ./results/${vid} --fps 1 --render --use_cached_dataset --save_mesh --save_video --keep contains_child --ground_constraint --ground_anchor child_bottom
+# python main.py --video /pasteur/data/1kd/brazil/raw/101_0.mp4 --out_folder ./results/101_0 --ground_constraint --keep contains_both --ground_anchor child_bottom --save_mesh $1
+
+# python main.py --images ./results/101_0/images --out_folder ./results/101_0 --ground_constraint --keep contains_both --ground_anchor child_bottom --save_mesh $1
 
 
-# vid=vid
-# python main.py --images data/demo/${vid} --out_folder ./results/${vid} --fps 1 --render --use_cached_dataset --ground_constraint --save_mesh --keep contains_both --ground_anchor adult_bottom
-
-
-# this is from https://giphy.com/gifs/mom-cleaning-dumping-toys-5pK2Rs57ZCACAh8Fxs
-set -x
-python main.py --video data/demo/giphy.gif --out_folder ./results/giphy_ground90_phalp --fps 1 --render --use_cached_dataset --ground_constraint --save_mesh --keep contains_only_both --ground_anchor child_bottom --save_gif --tracker_type phalp --track_overwrite "{2: 'infant', 11: 'infant'}" $1
-
-# first run ./run_demo.sh --dryrun
-# then ./run_demo.sh
+# set -x
+python main.py --video data/demo/giphy.gif --out_folder ./results/giphy --fps 3 --render --use_cached_dataset --ground_constraint --save_mesh --keep contains_only_both --ground_anchor child_bottom --tracker_type phalp --track_overwrite "{2: 'infant', 11: 'infant'}" --save_video --save_gif $1
 

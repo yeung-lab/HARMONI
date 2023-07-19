@@ -17,18 +17,18 @@ import constants as cfg
 import hps
 from dataset import Dataset
 from results import Results
-from utils.geometry import batch_euler2matrix
-from utils.vid_utils import video_to_images
+from utils.vid_utils import video_to_images, images_to_gif, images_to_mp4
 from hps.dapa.dapa_utils import get_original, collect_results_for_image_dapa
-
-# from utils.one_euro_filter import OneEuroFilter
+from postprocess.temporal_smplify import TemporalSMPLify
+from postprocess.one_euro_filter import OneEuroFilter
+from visualization.pyrender import render
 
 def main(args):
     # convert video to images
     if args.video is not None and os.path.exists(args.video):
-        images_folder = osp.join(osp.dirname(args.video), osp.splitext(osp.basename(args.video))[0])
+        images_folder = osp.join(osp.dirname(args.out_folder), osp.splitext(osp.basename(args.video))[0], 'images')
         os.makedirs(images_folder, exist_ok=True)
-        video_to_images(args.video, images_folder)
+        video_to_images(args.video, images_folder, start_frame=args.start_frame, end_frame=args.end_frame, fps=args.fps)
         logger.info('Saved frames to ' + images_folder)
 
     elif args.images is not None:
@@ -76,7 +76,6 @@ def main(args):
             dataset.track_body_types[track_id][0] = body_type
         logger.info('Overwriting done.')
         dataset.print_info()
-        print(dataset.track_to_id)
 
     results_holder = Results()
     camera_center = dataset.camera_center
@@ -89,7 +88,6 @@ def main(args):
         os.makedirs(out_render_path)
 
     if args.run_smplify:
-        from postprocess.temporal_smplify import TemporalSMPLify
         smplify_runner = TemporalSMPLify(
             step_size=1e-2,
             num_iters=args.smplify_iters,
@@ -286,31 +284,31 @@ def main(args):
         #################################################
         # Postprocessing: smoothing to remove jittering #
         #################################################
-        # if args.run_smplify:
-        #     # Smoothing using OneEuroFilter (as in SPIN).
-        #     for track_id, pidxs in dataset.track_to_id.items():
-        #         logger.info('Smoothing track {}'.format(track_id))
-        #         pred_pose = np.stack([results_holder.results[i]['body_pose'][0] for i in pidxs])
-        #         pred_orient = np.stack([results_holder.results[i]['global_orient'][0] for i in pidxs])
-        #         pred_transl = np.stack([results_holder.results[i]['transl'][0] for i in pidxs])
+        if args.run_smplify:
+            # Smoothing using OneEuroFilter.
+            for track_id, pidxs in dataset.track_to_id.items():
+                logger.info('Smoothing track {}'.format(track_id))
+                pred_pose = np.stack([results_holder.results[i]['body_pose'][0] for i in pidxs])
+                pred_orient = np.stack([results_holder.results[i]['global_orient'][0] for i in pidxs])
+                pred_transl = np.stack([results_holder.results[i]['transl'][0] for i in pidxs])
 
-        #         pose_filter = OneEuroFilter(np.zeros_like(pred_pose[0]), pred_pose[0], min_cutoff=0.004, beta=0.7)
-        #         orient_filter = OneEuroFilter(np.zeros_like(pred_orient[0]), pred_orient[0], min_cutoff=0.004, beta=0.7)
-        #         transl_filter = OneEuroFilter(np.zeros_like(pred_transl[0]), pred_transl[0], min_cutoff=0.004, beta=0.7)
-        #         for i, pose in enumerate(pred_pose[1:]):
-        #             i += 1
-        #             pose = pose_filter(np.ones_like(pose) * i, pose)
-        #             orient = orient_filter(np.ones_like(pred_orient[i]) * i, pred_orient[i])
-        #             transl = transl_filter(np.ones_like(pred_transl[i]) * i, pred_transl[i])
-        #             pred_pose[i] = pose
-        #             pred_orient[i] = orient
-        #             pred_transl[i] = transl
+                pose_filter = OneEuroFilter(np.zeros_like(pred_pose[0]), pred_pose[0], min_cutoff=0.004, beta=0.7)
+                orient_filter = OneEuroFilter(np.zeros_like(pred_orient[0]), pred_orient[0], min_cutoff=0.004, beta=0.7)
+                transl_filter = OneEuroFilter(np.zeros_like(pred_transl[0]), pred_transl[0], min_cutoff=0.004, beta=0.7)
+                for i, pose in enumerate(pred_pose[1:]):
+                    i += 1
+                    pose = pose_filter(np.ones_like(pose) * i, pose)
+                    orient = orient_filter(np.ones_like(pred_orient[i]) * i, pred_orient[i])
+                    transl = transl_filter(np.ones_like(pred_transl[i]) * i, pred_transl[i])
+                    pred_pose[i] = pose
+                    pred_orient[i] = orient
+                    pred_transl[i] = transl
 
-        #         for i, idx in enumerate(pidxs):
-        #             results_holder.results_smoothed[idx] = results_holder.results[idx]
-        #             results_holder.results_smoothed[idx]['body_pose'] = pred_pose[i].reshape(1, -1)
-        #             results_holder.results_smoothed[idx]['global_orient'] = pred_orient[i].reshape(1, -1)
-        #             results_holder.results_smoothed[idx]['transl'] = pred_transl[i].reshape(1, -1)
+                for i, idx in enumerate(pidxs):
+                    results_holder.results_smoothed[idx] = results_holder.results[idx]
+                    results_holder.results_smoothed[idx]['body_pose'] = pred_pose[i].reshape(1, -1)
+                    results_holder.results_smoothed[idx]['global_orient'] = pred_orient[i].reshape(1, -1)
+                    results_holder.results_smoothed[idx]['transl'] = pred_transl[i].reshape(1, -1)
         
         logger.info('Saving '+ os.path.join(out_folder, 'results.pt'))
         joblib.dump(results_holder, os.path.join(out_folder, 'results.pt'))
@@ -341,32 +339,17 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
         anchor = np.concatenate([np.stack(ankles) for ankles in list(results_holder.adult_bottom.values())]).mean(0)
 
     if args.render:
-        from visualization.pyrender import render
-        render(
-            dataset, results_holder, images_folder, out_render_path, cfg, cam_params, 
-            skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
-            camera_center=camera_center, img_list=None, 
-            fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
-            add_ground_plane=True, anchor=anchor, ground_normal=normal_vec)
+        # render(
+        #     dataset, results_holder, images_folder, out_render_path, cfg, cam_params, 
+        #     skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
+        #     camera_center=camera_center, img_list=None, 
+        #     fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
+        #     add_ground_plane=True, anchor=anchor, ground_normal=normal_vec)
 
-        if args.save_video:  # TODO: does not work if some frames are filetered out.
-            cmd = [
-                'ffmpeg',
-                '-y',
-                '-framerate', str(args.fps),
-                '-i', '{}/frame_%08d.jpg'.format(out_render_path),
-                '-c:v', 'libx264',
-                '-pix_fmt', 'yuv420p',
-                '-crf', '23',
-                '-preset', 'veryslow',
-                '{}/video.mp4'.format(out_folder)
-            ]
-            cmd = ' '.join(cmd)
-            print(cmd)
-            os.system(cmd)
+        if args.save_video:
+            images_to_mp4(out_render_path, os.path.join(out_folder, 'video.mp4'), fps=args.fps)
 
         if args.save_gif:
-            from utils.vid_utils import images_to_gif
             images_to_gif(out_render_path, os.path.join(out_folder, 'video.gif'), fps=args.fps)
 
 
