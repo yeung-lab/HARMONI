@@ -1,0 +1,43 @@
+task:
+  params:
+    alpha: 0
+    duration: 2.0
+    domain: domain
+    batch_size: 64
+    attachment: 0
+    per_epoch: 1
+    domain_loss: MSELoss
+    rnn:
+      unit: LSTM
+      hidden_size: 128
+      num_layers: 1
+      bidirectional: False
+      pool: max
+    labels_spec:
+      regular: ['KCHI', 'CHI', 'MAL', 'FEM']
+      union:
+        SPEECH: ['KCHI', 'CHI', 'FEM', 'MAL', 'SPEECH']
+  name: DomainAdversarialMultilabelDetection
+architecture:
+  params:
+    sincnet:
+      out_channels: [256, 60, 60]
+      kernel_size: [251, 5, 5]
+    rnn:
+      hidden_size: 128
+      dropout: 0
+      num_layers: 3
+      unit: LSTM
+      bidirectional: True
+    ff:
+      hidden_size: [128, 128]
+  name: pyannote.audio.models.PyanNet
+scheduler:
+  name: CyclicScheduler
+  params:
+    learning_rate: auto
+    epochs_per_cycle: 14
+feature_extraction:
+  name: RawAudio
+  params:
+    sample_rate: 16000

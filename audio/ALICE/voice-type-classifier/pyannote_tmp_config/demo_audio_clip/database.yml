@@ -1,0 +1,9 @@
+Databases:
+    demo_audio_clip: /scratch/users/choward8/audio_processor/demo/{uri}.wav
+
+Protocols:
+  demo_audio_clip:
+    SpeakerDiarization:
+      All:
+        test:
+          annotated: /scratch/users/choward8/audio_processor/ALICE/voice-type-classifier/pyannote_tmp_config/demo_audio_clip/demo_audio_clip.uem

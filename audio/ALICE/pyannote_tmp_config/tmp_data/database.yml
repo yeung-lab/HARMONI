@@ -1,0 +1,9 @@
+Databases:
+    tmp_data: /scratch/users/choward8/audio_processor/ALICE/tmp_data/{uri}.wav
+
+Protocols:
+  tmp_data:
+    SpeakerDiarization:
+      All:
+        test:
+          annotated: ./pyannote_tmp_config/tmp_data/tmp_data.uem

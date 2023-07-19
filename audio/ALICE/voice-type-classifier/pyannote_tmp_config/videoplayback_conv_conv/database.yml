@@ -1,0 +1,9 @@
+Databases:
+    videoplayback_conv_conv: /scratch/users/choward8/audio_processor/demo/{uri}.wav
+
+Protocols:
+  videoplayback_conv_conv:
+    SpeakerDiarization:
+      All:
+        test:
+          annotated: /scratch/users/choward8/audio_processor/ALICE/voice-type-classifier/pyannote_tmp_config/videoplayback_conv_conv/videoplayback_conv_conv.uem

@@ -1,0 +1,9 @@
+Databases:
+    fma_month_6_chi_1: /scratch/users/choward8/audio_processor/{uri}.wav
+
+Protocols:
+  fma_month_6_chi_1:
+    SpeakerDiarization:
+      All:
+        test:
+          annotated: /scratch/users/choward8/audio_processor/ALICE/voice-type-classifier/pyannote_tmp_config/fma_month_6_chi_1/fma_month_6_chi_1.uem

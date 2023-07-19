@@ -1,0 +1,17 @@
+Databases:
+   AMI: ./amicorpus/*/audio/{uri}.wav
+   MUSAN: ./musan/{uri}.wav
+
+Protocols:
+   AMI:
+      SpeakerDiarization:
+         MixHeadset:
+           train:
+              annotation: ./AMI/MixHeadset.train.rttm
+              annotated: ./AMI/MixHeadset.train.uem
+           development:
+              annotation: ./AMI/MixHeadset.development.rttm
+              annotated: ./AMI/MixHeadset.development.uem
+           test:
+              annotation: ./AMI/MixHeadset.test.rttm
+              annotated: ./AMI/MixHeadset.test.uem

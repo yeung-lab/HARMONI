@@ -1,0 +1,9 @@
+Databases:
+    ROS_5271_20_01_03600_snippet_mono: /scratch/users/choward8/audio_processor/ALICE/demo/{uri}.wav
+
+Protocols:
+  ROS_5271_20_01_03600_snippet_mono:
+    SpeakerDiarization:
+      All:
+        test:
+          annotated: /scratch/users/choward8/audio_processor/ALICE/voice-type-classifier/pyannote_tmp_config/ROS_5271_20_01_03600_snippet_mono/ROS_5271_20_01_03600_snippet_mono.uem

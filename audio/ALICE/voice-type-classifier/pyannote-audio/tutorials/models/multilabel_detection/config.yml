@@ -1,0 +1,96 @@
+# (Optional) Here we use a LabelMapper as a preprocessor
+# for the input annotations. This LabelMapper,
+# will map the input labels to their targets.
+# Hence, every utterances of Bob will be transformed
+# as utterances belonging to the MAL class.
+preprocessors:
+  annotation:
+    name: pyannote.database.util.LabelMapper
+    params:
+      keep_missing: False
+      mapping:
+        "Bob": "MAL"
+        "Alice": "FEM"
+        "Nolan": "CHI"
+        "Arthur": "MAL"
+        ...
+
+# A multilabel detection model is trained.
+# Here, training relies on 2s-long audio chunks,
+# batches of 64 audio chunks, and saves model to
+# disk every one (1) day worth of audio.
+# The labels_spec specifies how to build the classes
+# of the model given the raw label.
+
+# a) Here, we consider 4 regular labels which are
+# KCHI, CHI, MAL, FEM. The latter will account for
+# 4 dimensions in the predicted vector. This type
+# of labels is activated whenever a utterance with
+# the label of interest is encountered in the input
+# annotation.
+
+# b) 1 union label called "SPEECH" which is made of the union
+# of the classes KCHI, CHI, FEM, MAL, UNK. Hence, the SPEECH
+# class will be activated whenever one (or more) of the
+# listed class is activated. Note that UNK contributes to
+# activate the SPEECH class but is not predicted by the model
+
+# c) 1 intersection label called "OVL" which is made of the
+# intersection of the classes KCHI, CHI, FEM, MAL, UNK. Hence,
+# the OVL class will be activated whenever at least 2 of the listed
+# classes are activated at the same time.
+
+# To sum up, our model will output a vector of 6 scores :
+# [KCHI, CHI, MAL, FEM, SPEECH, UNK]
+task:
+   name: MultilabelDetection
+   params:
+      duration: 2.0
+      batch_size: 64
+      per_epoch: 1
+      labels_spec:
+        regular: ['KCHI', 'CHI', 'MAL', 'FEM']
+        union:
+          SPEECH: ['KCHI', 'CHI', 'FEM', 'MAL', 'UNK']
+        intersection:
+          OVL: ['KCHI', 'CHI', 'FEM', 'MAL', 'UNK']
+
+# Data augmentation is applied during training.
+# Here, it consists in additive noise from the
+# MUSAN database, with random signal-to-noise
+# ratio between 5 and 20 dB
+data_augmentation:
+   name: AddNoise
+   params:
+      snr_min: 5
+      snr_max: 20
+      collection: MUSAN.Collection.BackgroundNoise
+
+# Since we are training an end-to-end model, the
+# feature extraction step simply returns the raw
+# waveform.
+feature_extraction:
+   name: RawAudio
+   params:
+      sample_rate: 16000
+
+# We use the PyanNet architecture in Figure 2 of
+# pyannote.audio introductory paper. More details
+# about the architecture and its parameters can be
+# found directly in PyanNet docstring.
+architecture:
+   name: pyannote.audio.models.PyanNet
+   params:
+      rnn:
+         unit: LSTM
+         hidden_size: 128
+         num_layers: 2
+         bidirectional: True
+      ff:
+         hidden_size: [128, 128]
+
+# We use a constant learning rate of 1e-2
+scheduler:
+   name: ConstantScheduler
+   params:
+      learning_rate: 0.01
