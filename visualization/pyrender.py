@@ -16,11 +16,12 @@ from utils.geometry import batch_euler2matrix
 from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera, rotation_matrix_between_vectors
 from visualization.keypoints import draw_skeleton
 from postprocess.filter_frames import keep_frame
+from downstream.calc_downstream import pose_str_map, touch_str_map, visibility_str_map
 
 colors = get_colors()
 
-def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
-           camera_center=np.array([960, 540]), img_list=None, fast_render=True, label_str=[''], use_smoothed=False,
+def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
+           camera_center=np.array([960, 540]), img_list=None, fast_render=True, use_smoothed=False,
            add_ground_plane=False, anchor=None, ground_normal=None, top_view=False,
            keep_criterion='all'):
     """Generate meshes from the saved estimated SMPL parameters, and then render.
@@ -53,10 +54,19 @@ def render(dataset, results, img_path, save_folder, cfg, cam_params, skip_if_no_
         persons = img_to_persons[img_name]
         if skip_if_no_infant and len(persons) == 1: continue
 
-        if len(results.infant_bottom[img_name]) > 0:
-            desc = label_str
+        if labels is not None:
+            label_for_frame = labels[img_name]
+            if np.isnan(label_for_frame['distance']):
+                desc = ['Low confidence frame.']
+            else:
+                desc = [
+                    'Distance between caregiver and child: {:.2f}m'.format(label_for_frame['distance']),
+                    'Child Pose: {}'.format(pose_str_map[label_for_frame['pose']]),
+                    'Touch: {}'.format(touch_str_map[label_for_frame['touch']]),
+                    'Visibility: {}'.format(visibility_str_map[label_for_frame['visibility']]),
+                ]
         else:
-            desc = label_str
+            desc = ['Low confidence frame.']
 
         vertices = []
         faces = []
@@ -193,24 +203,23 @@ def render_image_group(
         images_save = output_img * 255
         images_save = np.clip(images_save, 0, 255).astype(np.uint8)
         # pad the top of images_save with white space
-        images_save = np.concatenate([np.ones((120, images_save.shape[1], 3)).astype(np.uint8) * 255, images_save], axis=0)
-
-        # ground_y = 0. # dummy value. TODO: fix later. Maybe print ground normal?
-        # images_save = cv2.putText(
-        #     images_save, f'Ground y: {round(ground_y, 3)}', (image.shape[1], 30), 
-        #     cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255))
+        images_save = np.concatenate([np.ones((100, images_save.shape[1], 3)).astype(np.uint8) * 255, images_save], axis=0)
+        bottom_pixel = images_save.shape[0] + 30
+        # pad the bottom of images_save with white space
+        images_save = np.concatenate([images_save, np.ones((100, images_save.shape[1], 3)).astype(np.uint8) * 255], axis=0)
         
         for i, (color, kp_2d) in enumerate(zip(mesh_color, keypoints_2d)):
             R, G, B = list(colors[color])
-            openpose_conf = round(kp_2d[:,2].mean(), 2) * 100
+            openpose_conf = int(round(kp_2d[:,2].mean(), 2) * 100)
             images_save = cv2.putText(
-                images_save, f'Track id: {track_ids[i]}. OpenPose Conf: {openpose_conf} %', (10, 70+i*30), 
+                images_save, f'Track id: {track_ids[i]}. OpenPose Conf: {openpose_conf} %', (10, 40+i*30), 
                 cv2.FONT_HERSHEY_TRIPLEX, 1, (int(R), int(G), int(B)), 2)
-       
+
+        font_scale = min(images_save.shape[0], images_save.shape[1]) * 1e-3
         for i, text in enumerate(desc):
             images_save = cv2.putText(
-                images_save, text, (image.shape[1]+700, 20 + i*30), 
-                cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 0),2)
+                images_save, text, (10, bottom_pixel + i*20), 
+                cv2.FONT_HERSHEY_TRIPLEX, font_scale, (120, 120, 120), 2)
 
         cv2.imwrite(save_filename, cv2.cvtColor(images_save, cv2.COLOR_BGR2RGB))
 
@@ -293,9 +302,6 @@ def render_with_pyrender(
 
     camera = pyrender.IntrinsicsCamera(fx=focal_length[0], fy=focal_length[1],
                                        cx=camera_center[0], cy=camera_center[1])
-    
-    # if cam_dist_scalar > 1, move the camera a little bit farther so the scene is more clear
-    # camera_pose[:3, 3] *= cam_dist_scalar
 
     scene.add(camera, pose=camera_pose)
 

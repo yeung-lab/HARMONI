@@ -37,6 +37,8 @@ def parse_config(argv=None):
     # parser.add_argument('--get_ground_normal_from', type=str, choices=['depth', 'user_input'], default='depth')
     parser.add_argument('--smplify_iters', type=int, default=10)
 
+    parser.add_argument('--disable_downstream', default=False, action='store_true')
+
     parser.add_argument('--render_only', default=False, action='store_true', 
                         help='Only render the results. Assuming there is already a results.pt file in the result folder.')
     parser.add_argument('--render', default=False, action='store_true')

@@ -22,6 +22,8 @@ from hps.dapa.dapa_utils import get_original, collect_results_for_image_dapa
 from postprocess.temporal_smplify import TemporalSMPLify
 from postprocess.one_euro_filter import OneEuroFilter
 from visualization.pyrender import render
+from downstream.calc_downstream import get_downstream_labels
+
 
 def main(args):
     # convert video to images
@@ -168,7 +170,6 @@ def main(args):
                 cur_batch_size = len(batch_pidxs)
                 batch = dataloader.collate_fn([dataset[i] for i in batch_pidxs])
 
-                # image_id = int(os.path.splitext(batch['img_name'][0])[0].strip('frame_'))
                 start_image_id = dataset.img_to_img_id[batch['img_name'][0]]
 
                 ####################################
@@ -178,7 +179,7 @@ def main(args):
                     # load ground normal, and set cam_rotmat to be identity matrix
                     for scene_id, (scene_rng, normal_vec_) in dataset.ground_normals.items():
                         if start_image_id >= scene_rng[0] and start_image_id <= scene_rng[1]:
-                            normal_vec = normal_vec_ #[[0,2,1]].copy()  # swap y and z
+                            normal_vec = normal_vec_ 
                             break
                 
                     if refine_with_ground:
@@ -259,27 +260,7 @@ def main(args):
                     ])[np.newaxis, :, :]
                     joints = joints @ rot_mtx - res['transl'][:, np.newaxis]
 
-                    # project the left/right ankles onto the normal_vec (unit-norm)
-                    # left_ankle_projection = np.dot(joints[0, 11], normal_vec.cpu().numpy())  # multiplying by normal_vec is done later.
-                    # right_ankle_projection = np.dot(joints[0, 14], normal_vec.cpu().numpy())
                     results_holder.update_scene(img_name, [joints[0, 11].tolist(), joints[0, 14].tolist()], cam_params, body_type)
-                    # results_holder.update_scene(img_name, [left_ankle_projection, right_ankle_projection], cam_params, body_type)
-                    
-                        # pcd = o3d.geometry.PointCloud()
-                        # pcd.points = o3d.utility.Vector3dVector(joints[0])
-                        # o3d.io.write_point_cloud(os.path.join(out_folder, 
-                        #                                       f"{os.path.splitext(img_name)[0]}_{body_type}_joints.ply"), pcd)
-                        
-                        # if ground_y is not None:
-                        #     starting_point = np.array([0, 0, 0])
-                        #     sampled_points = np.linspace(starting_point, starting_point + normal_vec.cpu().numpy())
-                        #     pcd = o3d.geometry.PointCloud()
-                        #     pcd.points = o3d.utility.Vector3dVector(sampled_points)
-                        #     o3d.io.write_point_cloud(os.path.join('results', f"{os.path.splitext(img_name)[0]}_{body_type}_ground_normal.ply"), pcd)
-
-                        #     pcd = o3d.geometry.PointCloud()
-                        #     pcd.points = o3d.utility.Vector3dVector(ground_y.unsqueeze(0).cpu().numpy())
-                        #     o3d.io.write_point_cloud(os.path.join('results', f"{os.path.splitext(img_name)[0]}_{body_type}_debug_anchor.ply"), pcd)
 
         #################################################
         # Postprocessing: smoothing to remove jittering #
@@ -338,13 +319,19 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
     elif args.ground_anchor == 'adult_bottom':
         anchor = np.concatenate([np.stack(ankles) for ankles in list(results_holder.adult_bottom.values())]).mean(0)
 
+    if not args.disable_downstream:
+        # returns a dictionary of results for each image
+        labels = get_downstream_labels(dataset, results_holder)
+    else:
+        labels = None
+
     if args.render:
-        # render(
-        #     dataset, results_holder, images_folder, out_render_path, cfg, cam_params, 
-        #     skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
-        #     camera_center=camera_center, img_list=None, 
-        #     fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
-        #     add_ground_plane=True, anchor=anchor, ground_normal=normal_vec)
+        render(
+            dataset, results_holder, labels, images_folder, out_render_path, cfg, cam_params, 
+            skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
+            camera_center=camera_center, img_list=None, 
+            fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
+            add_ground_plane=True, anchor=anchor, ground_normal=normal_vec)
 
         if args.save_video:
             images_to_mp4(out_render_path, os.path.join(out_folder, 'video.mp4'), fps=args.fps)
