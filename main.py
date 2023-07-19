@@ -319,7 +319,7 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
     elif args.ground_anchor == 'adult_bottom':
         anchor = np.concatenate([np.stack(ankles) for ankles in list(results_holder.adult_bottom.values())]).mean(0)
 
-    if not args.disable_downstream:
+    if args.add_downstream:
         # returns a dictionary of results for each image
         labels = get_downstream_labels(dataset, results_holder)
     else:

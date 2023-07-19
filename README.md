@@ -1,6 +1,7 @@
 # HARMONI: Using 3D Computer Vision and Audio Analysis to Quantify Caregiver–Child Behavior and Interaction from Videos
 
 ## Installation
+Tested on Ubuntu 20.04.4 LTS.
 1. Install conda environment.
 ```bash
 ./install.sh
@@ -41,8 +42,13 @@ python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out
 ```
 Then, we can run it again with the tracks we want to overwrite. e.g. `--track_overwrite "{2: 'infant', 11: 'infant'}"`.
 ```bash
-python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --ground_anchor child_bottom --save_gif --track_overwrite "{2: 'infant', 11: 'infant'}" --disable_downstream
+python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --ground_anchor child_bottom --save_gif --track_overwrite "{2: 'infant', 11: 'infant'}"
 ```
+If turn on the `--add_downstream` flag, the downstream stats will be overlayed to the results. E.g. 
+
+<p float="center">
+  <img src="teasers/video_with_labels_repeated.gif" width="50%" />
+</p>
 
 ## Code structure
 ```bash
