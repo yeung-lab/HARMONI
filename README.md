@@ -2,29 +2,30 @@
 
 ## Installation
 Tested on Ubuntu 20.04.4 LTS. CUDA 11.3. Python 3.9.
-1. Install conda environment.
+1. Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html), and then install the packages. 
 ```bash
-./install.sh
+conda create -n harmoni_visual python==3.9
+conda activate harmoni_visual
+./install_visual.sh
 ```
-2. Download data.
+To install environment for the audio part, please do
 ```
-gdown
-unzip data.zip
-rm data.zip
+cd audio
+conda env create -f process_audio.yml
+conda activate process_audio
 ```
-3. We provide the example output of one example public video clip. You could download it.
-```
-gdown
-unzip results.zip
-rm results.zip
-```
+
+2. Download data folder that includes model checkpoints and other dependencies [here]().
+
+3. We provide the example output from public video clips. You could download them [here]().
+
 Visualization of the example clip.
 <p float="center">
   <img src="teasers/video_repeated.gif" width="50%" />
 </p>
-Please see below for instructions for reproducing the results.
+Please see below for instructions for reproducing the visual results.
 
-## Running HARMONI on a demo video
+## Running HARMONI visual mdoel on a demo video
 Here we show how to run HARMONI on a public video clip [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). A basic command would be
 ```bash
 python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --save_gif
@@ -51,6 +52,15 @@ If turn on the `--add_downstream` flag, the downstream stats will be overlayed t
 
 For this 60 frame video clip, the typical run time on a single NVIDIA TITAN RTX GPU is 20 seconds for the body pose estimation (excluding data preprocessing and rendering). 
 Data preprocessing (i.e. runnign OpenPose, ground normal estimation, etc) took 2 minutes. Rendering took 1 sec/frame.
+
+## Running HARMONI audio mdoel on a demo video
+Before you run this, make sure to follow the additional installation instructions in `audio/README.md` and rebuild the x-vector extractor file.
+
+Here, we show the result on a publicly available demo video. You could download at [here](https://bergelsonlab.com/seedlings/).
+```
+cd audio
+python run.py ../data/demo/seedlings.mp4 ../results/seedlings/
+```
 
 ## Code structure
 ```bash
@@ -86,6 +96,7 @@ Output folder structure
 ## Related Resources
 We borrowed code from the below amazing resources:
 - [PARE](https://github.com/mkocabas/PARE) for HMR-related helpers.
+- [PHALP](https://github.com/brjathu/PHALP) for tracking.
 - [MiDaS](https://github.com/isl-org/MiDaS) for depth estimation.
 - [Panoptic DeepLab](https://github.com/bowenc0221/panoptic-deeplab) for segmentation.
 - [size_depth_disambiguation](https://github.com/nicolasugrinovic/size_depth_disambiguation) estimating ground normal.
