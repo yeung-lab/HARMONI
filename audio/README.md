@@ -1,6 +1,6 @@
 Audio component of HARMONI optimized for annotating the SEEDLings dataset
 
-## Additionaly installation:
+## Additional installation:
 Please rebuild the x-vector extractor file used for individual speaker diarization.
 ```
 cd VBx

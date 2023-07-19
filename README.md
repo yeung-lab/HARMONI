@@ -1,7 +1,18 @@
 # HARMONI: Using 3D Computer Vision and Audio Analysis to Quantify Caregiver–Child Behavior and Interaction from Videos
 
+## Overview
+- [System requirements and installation Guide](#Installation)
+- [Download dependency data](#Installation)
+- [Demo on a video clip](#Running-HARMONI-visual-mdoel-on-a-demo-video)
+- [Demo on a audio clip](#Running-HARMONI-audio-model-on-example-data)
+- [Related resources](#related-resources)
+- [Contact](#contact)
+
+
 ## Installation
-Tested on Ubuntu 20.04.4 LTS. CUDA 11.3. Python 3.9.
+Tested on a linux machine with a single NVIDIA TITAN RTX GPU.
+
+OS version is Ubuntu 20.04.4 LTS. CUDA version: 11.3. Python version 3.9.
 1. Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html), and then install the packages. 
 ```bash
 conda create -n harmoni_visual python==3.9
@@ -14,10 +25,11 @@ cd audio
 conda env create -f process_audio.yml
 conda activate process_audio
 ```
+Installation for either visual or audio model should be around 5 to 10 minutes.
 
 2. Download data folder that includes model checkpoints and other dependencies [here]().
 
-3. We provide the example output from public video clips. You could download them [here]().
+3. We provide the example output from public video clips. You could download them [here](https://drive.google.com/drive/u/2/folders/13B6j3Px0nfxt_CCMqGksEAGm4f_dRHGo).
 
 Visualization of the example clip.
 <p float="center">
@@ -26,7 +38,7 @@ Visualization of the example clip.
 Please see below for instructions for reproducing the visual results.
 
 ## Running HARMONI visual mdoel on a demo video
-Here we show how to run HARMONI on a public video clip [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). A basic command would be
+Here we show how to run HARMONI on a public video [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). A basic command would be
 ```bash
 python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --save_gif
 ```
@@ -50,13 +62,14 @@ If turn on the `--add_downstream` flag, the downstream stats will be overlayed t
   <img src="teasers/video_with_labels_repeated.gif" width="50%" />
 </p>
 
+### Run time
 For this 60 frame video clip, the typical run time on a single NVIDIA TITAN RTX GPU is 20 seconds for the body pose estimation (excluding data preprocessing and rendering). 
 Data preprocessing (i.e. runnign OpenPose, ground normal estimation, etc) took 2 minutes. Rendering took 1 sec/frame.
 
-## Running HARMONI audio mdoel on a demo video
+## Running HARMONI audio model on example data
 Before you run this, make sure to follow the additional installation instructions in `audio/README.md` and rebuild the x-vector extractor file.
 
-Here, we show the result on a publicly available demo video. You could download at [here](https://bergelsonlab.com/seedlings/).
+Here, we show the result on a publicly available demo [video](https://bergelsonlab.com/seedlings/). Please download and put it in `data/demo/seedlings.mp4`.
 ```
 cd audio
 python run.py ../data/demo/seedlings.mp4 ../results/seedlings/
@@ -66,9 +79,9 @@ python run.py ../data/demo/seedlings.mp4 ../results/seedlings/
 ```bash
 - preprocess # code for preprocessing: downsample, shot detection, ground plane estimation
 - trackers # tracking
-- detectors  # e.g. openpose, midas
-- hps # human pose and shape models. e.g. DAPA, CLIFF
-- postprocess  # code for refinement code
+- detectors  # e.g. openpose, midas, body type classifier
+- hps # human pose and shape models. e.g. DAPA
+- postprocess  # code for refinement. e.g. SMPLify, One Euro Filter.
 - visualization  # renderers and helpers for visualization
 - downstream # code for downstream analysis
 - audio # audio code
@@ -89,8 +102,8 @@ Output folder structure
 - render
 - results.pkl
 - dataset.pkl
-- result.mp4  # if --save_video
-- result.gif  # if --save_gif
+- result.mp4  # if --save_video is on
+- result.gif  # if --save_gif is on
 ```
 
 ## Related Resources
