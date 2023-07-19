@@ -6,38 +6,27 @@
 </p>
 
 
-## Dev plan
-Priority
-- [x] Without preprocessing. Get the hps and visualization code working.
-- [x] Get refinement with 2D keypoints working.
-- [x] Get ground plane constraint working.
-- Add downstream attributes extraction.
-- [x] Add customizable filters. (e.g. Filter out frames without 1 child and 1 adult during visualization, etc.)
-- [x] Add preprocessing: phalp tracking.
-- Add preprocessing: shot detection.
-- Allow for user correction.
-
-Later
-- audio
-- Colab, Dockerfile, gradio
-- Double check the license of dependencies and body models (e.g. SMPL)
-
 ## Installation
-Note: if you are on SAIL. Just do this to set up the env and data.
-```
-ln -s /pasteur/u/zzweng/miniconda3/envs/harmoni path_to_your_cond_env
-ln -s /pasteur/u/zzweng/projects/HARMONI/data data
-```
-
 1. Install conda environment.
 ```bash
 ./install.sh
 ```
 2. Download data.
-TODO.
+```
+gdown
+unzip data.zip
+rm data.zip
+```
+3. We provide the example output of one example public video clip. You could download it.
+```
+gdown
+unzip results.zip
+rm results.zip
+```
+Please see below for instructions for reproducing the results.
 
 ## Running HARMONI on a demo video
-Here we show how to run HARMONI on an example [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). 
+Here we show how to run HARMONI on a public video clip [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). 
 ```bash
 python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --ground_anchor child_bottom --save_gif --save_mesh
 ```
@@ -55,13 +44,6 @@ Then, we can run it again with the tracks we want to overwrite. e.g. `--track_ov
 python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --ground_anchor child_bottom --save_gif --save_mesh --track_overwrite "{2: 'infant', 11: 'infant'}" 
 ```
 
-## Compute downstream attributes
-TODO
-
-## Generate plots in the paper
-TODO
-
-
 ## Code structure
 ```bash
 - preprocess # code for preprocessing: downsample, shot detection, ground plane estimation
@@ -71,7 +53,7 @@ TODO
 - postprocess  # code for refinement code
 - visualization  # renderers and helpers for visualization
 - downstream # code for downstream analysis
-- audio
+- audio # audio code
 - data
     - cfgs  # configurations
     - demo  # a short demo video
@@ -90,9 +72,18 @@ Output folder structure
 - results.pkl
 - dataset.pkl
 - result.mp4  # if --save_video
+- result.gif  # if --save_gif
 ```
 
 ## Related Resources
 We borrowed code from the below amazing resources:
 - [PARE](https://github.com/mkocabas/PARE) for HMR-related helpers.
-- MiDaS, Panoptic DeepLab, ControlNet, OpenPose, etc...
+- [MiDaS](https://github.com/isl-org/MiDaS) for depth estimation.
+- [Panoptic DeepLab](https://github.com/bowenc0221/panoptic-deeplab) for segmentation.
+- [size_depth_disambiguation](https://github.com/nicolasugrinovic/size_depth_disambiguation) estimating ground normal.
+- [OpenPose](https://github.com/Hzzone/pytorch-openpose) for 2D keypoint estimation.
+
+
+## Contact
+[Zhenzhen Weng](https://zzweng.github.io/) (zzweng AT stanford DOT edu)
+
