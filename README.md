@@ -1,7 +1,7 @@
 # HARMONI: Using 3D Computer Vision and Audio Analysis to Quantify Caregiver–Child Behavior and Interaction from Videos
 
 ## Installation
-Tested on Ubuntu 20.04.4 LTS.
+Tested on Ubuntu 20.04.4 LTS. CUDA 11.3. Python 3.9.
 1. Install conda environment.
 ```bash
 ./install.sh
@@ -22,7 +22,6 @@ Visualization of the example clip.
 <p float="center">
   <img src="teasers/video_repeated.gif" width="50%" />
 </p>
-
 Please see below for instructions for reproducing the results.
 
 ## Running HARMONI on a demo video
@@ -49,6 +48,9 @@ If turn on the `--add_downstream` flag, the downstream stats will be overlayed t
 <p float="center">
   <img src="teasers/video_with_labels_repeated.gif" width="50%" />
 </p>
+
+For this 60 frame video clip, the typical run time on a single NVIDIA TITAN RTX GPU is 20 seconds for the body pose estimation (excluding data preprocessing and rendering). 
+Data preprocessing (i.e. runnign OpenPose, ground normal estimation, etc) took 2 minutes. Rendering took 1 sec/frame.
 
 ## Code structure
 ```bash

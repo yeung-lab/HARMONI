@@ -10,7 +10,6 @@ from tqdm import tqdm
 import numpy as np
 from loguru import logger
 from torchgeometry import rotation_matrix_to_angle_axis
-import open3d as o3d
 
 from cmd_parser import parse_config
 import constants as cfg
@@ -94,7 +93,7 @@ def main(args):
             step_size=1e-2,
             num_iters=args.smplify_iters,
             focal_length=cam_focal_length,
-            use_lbfgs=True,
+            use_lbfgs=False,
             device=torch.device('cuda'),
             max_iter=20, 
             ground_weight=args.ground_weight
