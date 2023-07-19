@@ -66,7 +66,7 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
                     'Visibility: {}'.format(visibility_str_map[label_for_frame['visibility']]),
                 ]
         else:
-            desc = ['Low confidence frame.']
+            desc = ['']
 
         vertices = []
         faces = []

@@ -1,11 +1,5 @@
 # HARMONI: Using 3D Computer Vision and Audio Analysis to Quantify Caregiver–Child Behavior and Interaction from Videos
 
-## Current results
-<p float="center">
-  <img src="teasers/video_repeated.gif" width="50%" />
-</p>
-
-
 ## Installation
 1. Install conda environment.
 ```bash
@@ -23,13 +17,19 @@ gdown
 unzip results.zip
 rm results.zip
 ```
+Visualization of the example clip.
+<p float="center">
+  <img src="teasers/video_repeated.gif" width="50%" />
+</p>
+
 Please see below for instructions for reproducing the results.
 
 ## Running HARMONI on a demo video
-Here we show how to run HARMONI on a public video clip [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). 
+Here we show how to run HARMONI on a public video clip [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). A basic command would be
 ```bash
-python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --ground_anchor child_bottom --save_gif --save_mesh
+python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --save_gif
 ```
+To reproduce the provided results, please use the below two commands instead.
 ### Some configurations that significantly improves the reconstruction quality:
 1. Using the detected ground plane as additional constraint (`--ground_constraint`). 
 As in [Ugrinovic et al.](https://github.com/nicolasugrinovic/size_depth_disambiguation/tree/d4787668131298de5bc47efaea9aad4f15f3f93d), ground normal is estimated by fitting a plane to the floor depth points, and then `--ground_anchor` ("child_bottom" | "adult_bottom") speficies whether we use the mean ankle positions of children or adults as the anchor point for the ground plane. Then, we run optimization on all humans and encourage their ankles to be on the ground plane.
@@ -41,7 +41,7 @@ python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out
 ```
 Then, we can run it again with the tracks we want to overwrite. e.g. `--track_overwrite "{2: 'infant', 11: 'infant'}"`.
 ```bash
-python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --ground_anchor child_bottom --save_gif --save_mesh --track_overwrite "{2: 'infant', 11: 'infant'}" 
+python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --ground_anchor child_bottom --save_gif --track_overwrite "{2: 'infant', 11: 'infant'}" --disable_downstream
 ```
 
 ## Code structure
@@ -86,4 +86,3 @@ We borrowed code from the below amazing resources:
 
 ## Contact
 [Zhenzhen Weng](https://zzweng.github.io/) (zzweng AT stanford DOT edu)
-
