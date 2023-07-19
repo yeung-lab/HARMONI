@@ -1,0 +1,2 @@
+FileID 	 phonemes 	 syllables 	 words
+seedlings	147	70	48

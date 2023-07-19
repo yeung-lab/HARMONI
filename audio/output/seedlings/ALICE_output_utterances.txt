@@ -1,0 +1,7 @@
+/pasteur/u/zzweng/projects/HARMONI/audio/ALICE/tmp_data/short/seedlings_00000100_00085120.wav	67.95	33.67	23.05
+/pasteur/u/zzweng/projects/HARMONI/audio/ALICE/tmp_data/short/seedlings_00096040_00107530.wav	9.26	3.99	2.83
+/pasteur/u/zzweng/projects/HARMONI/audio/ALICE/tmp_data/short/seedlings_00131680_00141790.wav	6.29	2.44	1.82
+/pasteur/u/zzweng/projects/HARMONI/audio/ALICE/tmp_data/short/seedlings_00180110_00185170.wav	8.66	3.97	2.53
+/pasteur/u/zzweng/projects/HARMONI/audio/ALICE/tmp_data/short/seedlings_00205500_00238680.wav	24.96	12.21	8.33
+/pasteur/u/zzweng/projects/HARMONI/audio/ALICE/tmp_data/short/seedlings_00245110_00271920.wav	21.46	10.33	7.00
+/pasteur/u/zzweng/projects/HARMONI/audio/ALICE/tmp_data/short/seedlings_00294940_00304140.wav	8.44	3.67	2.52
