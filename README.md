@@ -1,10 +1,11 @@
 # HARMONI: Using 3D Computer Vision and Audio Analysis to Quantify Caregiver–Child Behavior and Interaction from Videos
 
-## Overview
-- [System requirements and installation Guide](#Installation)
-- [Download dependency data](#Installation)
-- [Demo on a video clip](#Running-HARMONI-visual-mdoel-on-a-demo-video)
-- [Demo on a audio clip](#Running-HARMONI-audio-model-on-example-data)
+## Repository Overview
+- [System requirements and installation Guide](#installation)
+- [Download dependency data](#installation)
+- [Demo on a video clip](#running-harmoni-visual-mdoel-on-a-demo-video)
+- [Demo on a audio clip](#running-harmoni-audio-model-on-example-data)
+- [Code structure](#code-structure)
 - [Related resources](#related-resources)
 - [Contact](#contact)
 
@@ -27,7 +28,7 @@ conda activate process_audio
 ```
 Installation for either visual or audio model should be around 5 to 10 minutes.
 
-2. Download data folder that includes model checkpoints and other dependencies [here]().
+2. Download data folder that includes model checkpoints and other dependencies [here](https://drive.google.com/drive/u/2/folders/1vMZl8CTf1-LUv6x1J_yHpYWU-IhPLQQL).
 
 3. We provide the example output from public video clips. You could download them [here](https://drive.google.com/drive/u/2/folders/13B6j3Px0nfxt_CCMqGksEAGm4f_dRHGo).
 
@@ -93,6 +94,7 @@ python run.py ../data/demo/seedlings.mp4 ../results/seedlings/
         - SMIL
         - SMPLX
     - ckpts # model checkpoints
+- _DATA # data for running PHALP. It should be downloaded automatically.
 ```
 
 Output folder structure
