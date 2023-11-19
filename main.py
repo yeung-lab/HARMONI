@@ -129,6 +129,7 @@ def main(args):
 
         else:
             tracks_to_be_fitted = adult_tracks + infant_tracks
+            num_initial_tracks = len(tracks_to_be_fitted)
 
         # Begin main loop
         for fit_id, track_id in enumerate(tracks_to_be_fitted):
@@ -301,8 +302,10 @@ def main(args):
         for scene_id, ((scene_start, scene_end), normal_vec) in dataset.ground_normals.items():
             break
 
-    if isinstance(normal_vec, torch.Tensor):
+    if args.ground_constraint and isinstance(normal_vec, torch.Tensor):
         normal_vec = normal_vec.cpu().numpy()
+    if not args.ground_constraint:
+        normal_vec = None
     
     post_fitting(dataset, results_holder, out_folder, cfg, device, args,
                 camera_center, normal_vec, cam_params, images_folder,
@@ -330,7 +333,7 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
             skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
             camera_center=camera_center, img_list=None, 
             fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
-            add_ground_plane=True, anchor=anchor, ground_normal=normal_vec)
+            add_ground_plane=normal_vec is not None, anchor=anchor, ground_normal=normal_vec)
 
         if args.save_video:
             images_to_mp4(out_render_path, os.path.join(out_folder, 'video.mp4'), fps=args.fps)

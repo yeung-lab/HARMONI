@@ -322,8 +322,11 @@ def render_with_pyrender(
         viewport_height=image.shape[0],
         point_size=1.0
     )
-
-    color, rend_depth = renderer.render(scene, flags=pyrender.RenderFlags.RGBA)
+    try:
+        color, rend_depth = renderer.render(scene, flags=pyrender.RenderFlags.RGBA)
+    except:
+        print('Error rendering image. Skipping...')
+        return image
     color = color.astype(np.float32) / 255.0
     valid_mask = (rend_depth > 0)[:, :, None]
     output_img = (color[:, :, :3] * valid_mask + (1 - valid_mask) * image)

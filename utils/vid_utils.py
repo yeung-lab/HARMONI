@@ -6,6 +6,8 @@ from pytube import YouTube
 from PIL import Image
 import imageio
 
+image_exts = ['.jpg', '.jpeg', '.png']
+
 def download_and_process_seedlings_sample(save_path, fps=1):
     if not os.path.exists(save_path):
         url = 'https://bergelsonlab.com/seedlings/images/30sMB.mp4'  # this is public at https://bergelsonlab.com/seedlings/
@@ -74,7 +76,7 @@ def gif_to_images(gif_path, output_path):
 def images_to_gif(image_dir, gif_path, fps):
     images = []
     for filename in sorted(os.listdir(image_dir)):
-        if filename.endswith(".png") and not filename.startswith("."):
+        if os.path.splitext(filename)[1] in image_exts and not filename.startswith("."):
             images.append(imageio.imread(os.path.join(image_dir, filename)))
     
     # `fps=50` == `duration=20` (1000 * 1/50).
@@ -96,7 +98,7 @@ def repeat_gif(gif_path, output_path, num_repeats):
 def images_to_mp4(image_dir, vid_path, fps):
     vid = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (960, 440))
     for filename in sorted(os.listdir(image_dir)):
-        if filename.endswith(".png") and not filename.startswith("."):
+        if os.path.splitext(filename)[1] in image_exts and not filename.startswith("."):
             image = cv2.imread(os.path.join(image_dir, filename))
             vid.write(image)
     vid.release()
