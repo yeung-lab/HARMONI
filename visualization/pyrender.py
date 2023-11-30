@@ -64,6 +64,8 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
                     'Child Pose: {}'.format(pose_str_map[label_for_frame['pose']]),
                     'Touch: {}'.format(touch_str_map[label_for_frame['touch']]),
                     'Visibility: {}'.format(visibility_str_map[label_for_frame['visibility']]),
+                    'Adult child angle: {:.2f} deg, {:.2f} deg'.format(label_for_frame['adult_angle'], label_for_frame['infant_angle'])
+
                 ]
         else:
             desc = ['']
@@ -206,7 +208,7 @@ def render_image_group(
         images_save = np.concatenate([np.ones((100, images_save.shape[1], 3)).astype(np.uint8) * 255, images_save], axis=0)
         bottom_pixel = images_save.shape[0] + 30
         # pad the bottom of images_save with white space
-        images_save = np.concatenate([images_save, np.ones((100, images_save.shape[1], 3)).astype(np.uint8) * 255], axis=0)
+        images_save = np.concatenate([images_save, np.ones((200, images_save.shape[1], 3)).astype(np.uint8) * 255], axis=0)
         
         for i, (color, kp_2d) in enumerate(zip(mesh_color, keypoints_2d)):
             R, G, B = list(colors[color])
@@ -218,7 +220,7 @@ def render_image_group(
         font_scale = min(images_save.shape[0], images_save.shape[1]) * 1e-3
         for i, text in enumerate(desc):
             images_save = cv2.putText(
-                images_save, text, (10, bottom_pixel + i*20), 
+                images_save, text, (10, bottom_pixel + i*40), 
                 cv2.FONT_HERSHEY_TRIPLEX, font_scale, (120, 120, 120), 2)
 
         cv2.imwrite(save_filename, cv2.cvtColor(images_save, cv2.COLOR_BGR2RGB))

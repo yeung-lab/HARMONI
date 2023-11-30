@@ -29,7 +29,7 @@ def parse_config(argv=None):
                         help='If dummy, each person is a track.')
     parser.add_argument('--track_overwrite', type=str, default='{}', help='Overwrite the tracking results. e.g. {4: `adult`}')
 
-    parser.add_argument('--hps', type=str, default='dapa', choices=['dapa'], 
+    parser.add_argument('--hps', type=str, default='dapa', choices=['dapa', 'cliff'], 
                         help='The hps model being used')
     
     parser.add_argument('--run_smplify', default=False, action='store_true')

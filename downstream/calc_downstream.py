@@ -117,6 +117,8 @@ def is_in_cone(start_point, direction, other_point, max_distance, fov):
 
 
 def is_visible(joints, other_joints, max_distance=1.8, fov=120):
+    """Returns True if the other person's head is in the visible cone of the person's eyes.
+    """
     reye, leye, rear, lear, nose, neck = joints[15], joints[16], joints[17], joints[18], joints[0], joints[1]
     eye_mid = (reye+leye)/2
     a, b, c, _ = get_plane(rear, lear, neck, anchor=eye_mid)
@@ -154,7 +156,7 @@ def get_valid_idxs(results, pids, filter_by_2dkp=False, min_2dkp=4):
     return infant_pids, adult_pids, valid_infant_idxs, valid_adult_idxs
 
 
-def get_downstream_labels(dataset, results):
+def get_downstream_labels(dataset, results, filter_by_2dkp):
     img_to_pid = collections.defaultdict(list)
     img_list = []
     for pid, (img_name, _) in dataset.person_to_img.items():
@@ -174,7 +176,7 @@ def get_downstream_labels(dataset, results):
     for img_idx, img_path in enumerate(img_list):
         img_name = os.path.split(img_path)[1]
         pids = img_to_pid[img_name]
-        infant_pids, adult_pids, valid_infant_idxs, valid_adult_idxs = get_valid_idxs(results, pids, filter_by_2dkp=True)
+        infant_pids, adult_pids, valid_infant_idxs, valid_adult_idxs = get_valid_idxs(results, pids, filter_by_2dkp=filter_by_2dkp)
         exist_dyad = sum(valid_infant_idxs) != 0 and sum(valid_adult_idxs) != 0
         calc_pose_id = sum(valid_infant_idxs) != 0
 
@@ -215,8 +217,8 @@ def get_downstream_labels(dataset, results):
             adult_pid = adult_pids[adult_idx]
             adult_joints_3d = unbatch(results.results[adult_pid]['joints'], 2)
 
-            adult_can_see_infant, adult_angle, _ = is_visible(adult_joints_3d, infant_joints_3d, fov=200, max_distance=100)
-            infant_can_see_adult, infant_angle, _ = is_visible(infant_joints_3d, adult_joints_3d, fov=200, max_distance=100.)
+            adult_can_see_infant, adult_angle, _ = is_visible(adult_joints_3d, infant_joints_3d, fov=180, max_distance=100)
+            infant_can_see_adult, infant_angle, _ = is_visible(infant_joints_3d, adult_joints_3d, fov=180, max_distance=100.)
 
             # 5 categories (adult and infant can see each other, infant can see the adult, adult can see the infant, can't see each other, NA)
             if adult_can_see_infant and infant_can_see_adult:

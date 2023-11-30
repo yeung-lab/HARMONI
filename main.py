@@ -82,6 +82,9 @@ def main(args):
     camera_center = dataset.camera_center
     orig_img_width, orig_img_height = camera_center[0] * 2, camera_center[1] * 2
     cam_focal_length = args.camera_focal
+    fov = 60
+    cam_focal_length = orig_img_width / (2 * np.tan(fov * np.pi / 360))
+    logger.info('Camera focal length is set to ' + str(cam_focal_length))
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     
     out_render_path = os.path.join(out_folder, 'render')
@@ -105,15 +108,25 @@ def main(args):
     cam_pitch = cam_roll = 0.  # settings these would make render_rotmat an identity matrix.
     cam_vfov = 0.6  # this does not matter
     cam_params = np.array([cam_vfov, cam_pitch, cam_roll, cam_focal_length])   # Identity matrix
+    create_body_pose = True
 
     if not args.render_only:
         # load pretrained DAPA model
         if args.hps == 'dapa':
             adult_model = hps.get_dapa_model(cfg.dapa_adult_model, cfg.smpl_mean_params).cuda().eval()
             infant_model = hps.get_dapa_model(cfg.dapa_child_model, cfg.smpl_mean_params).cuda().eval()
-            create_body_pose = True
+            
         elif args.hps == 'cliff':
-            raise NotImplementedError('Cliff model not implemented yet.')
+            from hps.cliff import cliff_hr48, strip_prefix_if_present
+            cliff_model = cliff_hr48(cfg.smpl_mean_params).cuda()
+            # Load the pretrained model
+            logger.info("Load the CLIFF checkpoint from path:", cfg.cliff_hr48_model)
+            state_dict = torch.load(cfg.cliff_hr48_model)['model']
+            state_dict = strip_prefix_if_present(state_dict, prefix="module.")
+            cliff_model.load_state_dict(state_dict, strict=True)
+            cliff_model.eval()
+
+            infant_model = hps.get_dapa_model(cfg.dapa_child_model, cfg.smpl_mean_params).cuda().eval()
         else:
             create_body_pose = False  # if use vposer, then create_body_pose = False
             raise NotImplementedError('Unknown hps model: ' + args.hps)
@@ -192,36 +205,51 @@ def main(args):
 
                     normal_vec = torch.from_numpy(normal_vec).to(device).float()
 
-                if args.hps == 'dapa':
+                if body_type == 'infant':
                     with torch.no_grad():
-                        if body_type == 'infant':
-                            pred_rotmat, pred_betas, pred_camera = infant_model(batch['norm_cropped_img'].to(device))
-                        else:
+                        pred_rotmat, pred_betas, pred_camera = infant_model(batch['norm_cropped_img'].to(device))
+                else:
+                    if args.hps == 'dapa':
+                        with torch.no_grad():
                             pred_rotmat, pred_betas, pred_camera = adult_model(batch['norm_cropped_img'].to(device))
 
-                    init_betas = pred_betas
-                    pred_rotmat_hom = torch.cat(
-                        [pred_rotmat.view(-1, 3, 3),
-                        torch.tensor([0, 0, 1], dtype=torch.float32, device=device).view(1, 3, 1).expand(cur_batch_size*24, -1, -1)
-                        ], dim=-1)
-                    pred_pose = rotation_matrix_to_angle_axis(pred_rotmat_hom).contiguous().view(cur_batch_size, -1)
-                    pred_pose[torch.isnan(pred_pose)] = 0.0
-                    init_global_orient = pred_pose[:,:3]
-                    init_pose = pred_pose[:, 3:]
+                    elif args.hps == 'cliff':
+                        norm_img = batch['norm_cropped_img'].to(device)
+                        yhxw = batch['yhxw']
+                        cx, cy = yhxw[:, 2] + yhxw[:, 3] / 2., yhxw[:, 0] + yhxw[:, 1] / 2.
+                        b = torch.max(yhxw[:, 1], yhxw[:, 3])
+                        img_w, img_h = orig_img_width, orig_img_height
+                        bbox_info = torch.stack([cx - img_w / 2., cy - img_h / 2., b], dim=-1).to(device).float()
+                        # The constants below are used for normalization, and calculated from H36M data.
+                        # It should be fine if you use the plain Equation (5) in the paper.
+                        bbox_info[:, :2] = bbox_info[:, :2] / cam_focal_length * 2.8  # [-1, 1]
+                        bbox_info[:, 2] = (bbox_info[:, 2] - 0.24 * cam_focal_length) / (0.06 * cam_focal_length)  # [-1, 1]
 
-                    # also pass in the transl, which is converted from pred_camera
-                    yhwx = batch['yhxw']
-                    y, h, x = yhwx[:,0], yhwx[:,1], yhwx[:,2]
-                    init_transl = []
-                    for i in range(cur_batch_size):
-                        trans = get_original(pred_camera[i].detach().cpu().numpy(), x[i], y[i], h[i], cam_focal_length, 
-                                            orig_img_width, orig_img_height)
-                        init_transl.append(torch.from_numpy(trans))
-                    init_transl = torch.stack(init_transl).type(pred_camera.dtype).to(pred_camera.device)
+                        with torch.no_grad():
+                            pred_rotmat, pred_betas, pred_camera = cliff_model(norm_img, bbox_info)
+                    else:
+                        raise NotImplementedError('Unknown hps model: ' + args.hps)
+                
+                init_betas = pred_betas
+                pred_rotmat_hom = torch.cat(
+                    [pred_rotmat.view(-1, 3, 3),
+                    torch.tensor([0, 0, 1], dtype=torch.float32, device=device).view(1, 3, 1).expand(cur_batch_size*24, -1, -1)
+                    ], dim=-1)
+                pred_pose = rotation_matrix_to_angle_axis(pred_rotmat_hom).contiguous().view(cur_batch_size, -1)
+                pred_pose[torch.isnan(pred_pose)] = 0.0
+                init_global_orient = pred_pose[:,:3]
+                init_pose = pred_pose[:, 3:]
 
-                else:
-                    # TODO: (option to use phalp as initialization)
-                    init_betas = init_global_orient = init_pose = init_transl = None
+                # also pass in the transl, which is converted from pred_camera
+                yhwx = batch['yhxw']
+                y, h, x = yhwx[:,0], yhwx[:,1], yhwx[:,2]
+                init_transl = []
+                for i in range(cur_batch_size):
+                    trans = get_original(pred_camera[i].detach().cpu().numpy(), x[i], y[i], h[i], cam_focal_length, 
+                                        orig_img_width, orig_img_height)
+                    init_transl.append(torch.from_numpy(trans))
+                init_transl = torch.stack(init_transl).type(pred_camera.dtype).to(pred_camera.device)
+
                 
                 ##############################################
                 # Collect results and optionally run SMPLify #
@@ -323,7 +351,8 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
 
     if args.add_downstream:
         # returns a dictionary of results for each image
-        labels = get_downstream_labels(dataset, results_holder)
+        filter_by_2dkp = args.pipeline == 1
+        labels = get_downstream_labels(dataset, results_holder, filter_by_2dkp)
     else:
         labels = None
 
