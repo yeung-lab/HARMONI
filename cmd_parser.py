@@ -15,6 +15,8 @@ def parse_config(argv=None):
     parser.add_argument('--video', type=str, default='', help='Path to the input video')
     parser.add_argument('--start_frame', type=int, default=0, help='Start frame of the input video')
     parser.add_argument('--end_frame', type=int, default=100, help='End frame of the input video')
+    parser.add_argument('--pipeline', type=int, choices=[1, 2], default=1, 
+                        help='Pipeline 1: run openpose, run tracker, classify bbox. Pipeline 2: grounded dino, run tracker.')
     
     parser.add_argument('--out_folder', type=str, default='', help='Where the results are saved')
     parser.add_argument('--fps', type=int, default=1, help='FPS of the input video')

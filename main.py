@@ -27,7 +27,7 @@ from downstream.calc_downstream import get_downstream_labels
 def main(args):
     # convert video to images
     if args.video is not None and os.path.exists(args.video):
-        images_folder = osp.join(osp.dirname(args.out_folder), osp.splitext(osp.basename(args.video))[0], 'images')
+        images_folder = osp.join(args.out_folder, 'images')
         os.makedirs(images_folder, exist_ok=True)
         video_to_images(args.video, images_folder, start_frame=args.start_frame, end_frame=args.end_frame, fps=args.fps)
         logger.info('Saved frames to ' + images_folder)
@@ -59,7 +59,7 @@ def main(args):
         dataset = joblib.load(dataset_path)
     else:  
         dataset = Dataset(
-            images_folder, out_folder=out_folder, tracker_type=args.tracker_type, cfg=cfg
+            images_folder, out_folder=out_folder, tracker_type=args.tracker_type, pipeline=args.pipeline, cfg=cfg
         )
         if args.ground_constraint:
             dataset.estimate_ground_plane_normal()

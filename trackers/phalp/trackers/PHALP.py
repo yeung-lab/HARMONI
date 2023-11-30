@@ -3,7 +3,7 @@ import os
 from collections import defaultdict
 import traceback
 import warnings
-os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+os.environ['PYOPENGL_PLATFORM'] = 'egl'
 warnings.filterwarnings('ignore')
 
 import cv2

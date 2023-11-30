@@ -1,4 +1,4 @@
-import os, sys, pickle
+import os, sys, json
 from glob import glob
 from collections import defaultdict
 
@@ -8,16 +8,18 @@ from torch.utils import data
 import numpy as np
 import omegaconf
 
-from detectors.classifier import BodyTypeClassifier
+
 from detectors.ground_normal.get_ground_normal import compute
-from detectors.openpose import run_on_images as run_openpose
 from utils.img_utils import cropout_openpose_one_third, default_img_transform, crop
 
 
 class Dataset(data.Dataset):
     """ Holds images, 2D keypoints, their predicted body types (infant vs. adult) and additional info.
+
+    Pipeline 1: run openpose, run tracker, classify bbox.
+    Pipeline 2: grounded dino, run tracker.
     """ 
-    def __init__(self, img_folder, out_folder, tracker_type, cfg):
+    def __init__(self, img_folder, out_folder, tracker_type, pipeline, cfg):
         self.img_folder = img_folder
         self.out_folder = out_folder
         img_paths = sorted(glob(os.path.join(img_folder, '*')))
@@ -30,44 +32,121 @@ class Dataset(data.Dataset):
         self.camera_center = (image_width / 2, image_height / 2)
         logger.info(f'Camera center: {self.camera_center}')
 
-        os.makedirs(os.path.join(out_folder, 'openpose'), exist_ok=True)
-        results = run_openpose(self.img_paths, hand=False, 
-                            #    vis_path=os.path.join(out_folder, 'openpose')
-                               )
-        
-        num_persons = 0
-        person_to_img = {}  # {pid: [img_name, person_index]}
-        img_to_img_id = {}
-        person_to_det = {}
-        for img_id, (img_path, keypoints_list) in enumerate(results.items()):
-            img_name = os.path.basename(img_path)
-            img_to_img_id[img_name] = img_id
+        if pipeline == 1:
+            from detectors.classifier import BodyTypeClassifier
+            from detectors.openpose import run_on_images as run_openpose
 
-            for i in range(len(keypoints_list)):
-                person_to_img[num_persons] = [img_name, i]
-                person_to_det[num_persons] = {
-                    'img_name': img_name,
-                    'keypoints_25': keypoints_list[i],
-                    # 'bbox':  # x,y,w,h
-                }
-                num_persons += 1
+            os.makedirs(os.path.join(out_folder, 'openpose'), exist_ok=True)
+            results = run_openpose(self.img_paths, hand=False, 
+                                #    vis_path=os.path.join(out_folder, 'openpose')
+                                )
+            
+            num_persons = 0
+            person_to_img = {}  # {pid: [img_name, person_index]}
+            img_to_img_id = {}
+            person_to_det = {}
+            for img_id, (img_path, keypoints_list) in enumerate(results.items()):
+                img_name = os.path.basename(img_path)
+                img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+                img_to_img_id[img_name] = img_id
+                
+                for i in range(len(keypoints_list)):
+                    person_to_img[num_persons] = [img_name, i]
+                    kp = keypoints_list[i]
+                    crop_out = cropout_openpose_one_third(img, kp)
+                    xywh = [crop_out['crop_boundary']['x'], crop_out['crop_boundary']['y'],
+                            crop_out['crop_boundary']['w'], crop_out['crop_boundary']['h']]
+                    person_to_det[num_persons] = {
+                        'img_name': img_name,
+                        'keypoints_25': kp,
+                        'bbox': xywh
+                    }
+                    num_persons += 1
+                    
+            body_type_classifier = BodyTypeClassifier(cfg.body_type_classifier_path)
+            track_to_id, id_to_track, track_id_to_detections = self.run_tracking(person_to_det, tracker_type=tracker_type)
+            track_body_types = body_type_classifier(track_id_to_detections, self.img_folder, out_folder, classifier=None)
 
-        body_type_classifier = BodyTypeClassifier(cfg.body_type_classifier_path)
-        
+        elif pipeline == 2:
+                
+            # TODO: sort out env conflict and use run_on_images instead.
+            logger.info('Running Grounded Dino on images in {}'.format(img_folder))
+            results_json = os.path.join(os.path.dirname(img_folder), 'ground_dino.json')
+            os.system('/pasteur/u/zywang/env/conda/envs/3d/bin/python detectors/grounded_dino/api.py --input_video {} --output_file {}'.format(
+                img_folder, results_json))
+            with open(results_json, 'r') as f:
+                detection_list = json.load(f)
+
+            # from detectors.grounded_dino.api import run_on_images_cmd as run_grounded_dino
+            # detection_list = run_grounded_dino(img_folder)
+            num_persons = 0
+            person_to_img = {}  # {pid: [img_name, person_index]}
+            img_to_img_id = {}
+            person_to_det = {}
+            id_to_track = {}
+            # dummy tracking
+            baby_track_id = 1
+            adult_track_id = 0
+            track_to_id = defaultdict(list)
+            track_id_to_detections = defaultdict(list)
+
+            for img_id, detections in enumerate(detection_list):
+                img_name = os.path.basename(detections[0][0])
+                img_to_img_id[img_name] = img_id
+                
+                for i, det in enumerate(detections):
+                    person_to_img[num_persons] = [img_name, i]
+                    xyxy = det[1]  # x,y,x,y
+                    xywh = [xyxy[0], xyxy[1], xyxy[2]-xyxy[0], xyxy[3]-xyxy[1]]
+                    person_to_det[num_persons] = {
+                        'img_name': img_name,
+                        'bbox': xywh,
+                        # 'keypoints_25': np.zeros((25, 3)),
+                    }
+                    
+                    if det[3] == 'infant':
+                        track_id_to_detections[baby_track_id].append(person_to_det[num_persons])
+                        track_to_id[baby_track_id].append(num_persons)
+                        id_to_track[num_persons] = baby_track_id
+                    else:
+                        track_id_to_detections[adult_track_id].append(person_to_det[num_persons])
+                        track_to_id[adult_track_id].append(num_persons)
+                        id_to_track[num_persons] = adult_track_id
+
+                    num_persons += 1
+            
+            track_body_types = {0: ('adult', None), 1: ('infant', None)}
+            self.visualize_tracks(os.path.join(out_folder, 'tracks'), track_id_to_detections)
+        else:
+            raise NotImplementedError(f'Unknown pipeline type: {cfg.pipeline}')
+            
         self.num_persons = num_persons
         self.num_ghost_detections = 0
         self.person_to_img = person_to_img  # mapping from person id to img name and person index within the image
         self.img_to_img_id = img_to_img_id
         self.person_to_det = person_to_det
         self.transform = default_img_transform()
-        
-        track_to_id, id_to_track, track_id_to_detections = self.run_tracking(person_to_det, tracker_type=tracker_type)
-        track_body_types = body_type_classifier(track_id_to_detections, self.img_folder, out_folder, classifier=None)
         self.track_to_id = track_to_id  # mapping from track id to list of person ids. Used in main fitting loop.
         self.id_to_track = id_to_track
         self.track_body_types = track_body_types
         
         self.print_info()
+
+    def visualize_tracks(self, out_folder, track_id_to_detections, num_per_track=5):
+        os.makedirs(out_folder, exist_ok=True)
+        for track_id, detections in track_id_to_detections.items():
+            crops = []
+            detections_to_visualize = np.random.choice(detections, min(num_per_track, len(detections)), replace=False)
+            for det in detections_to_visualize:
+                img_name = det['img_name']
+                img = cv2.imread(os.path.join(self.img_folder, img_name))
+                bbox = det['bbox']
+                x,y,w,h = bbox
+                cropped_img = crop(img, [x+w/2, y+h/2], max(w, h), [224,224], edge_padding=True).astype(np.uint8)
+                crops.append(cv2.resize(cropped_img, (224, 224)))
+
+            crops = np.concatenate(crops, axis=1)
+            cv2.imwrite(os.path.join(out_folder, f'track_{track_id}.jpg'), crops)
 
     def run_tracking(self, person_to_det, tracker_type):
         if tracker_type == 'dummy':
@@ -96,69 +175,6 @@ class Dataset(data.Dataset):
             raise NotImplementedError(f'Unknown tracker type: {tracker_type}')
 
         return track_to_id, id_to_track, track_id_to_detections
-
-    def process_phalp(self):
-        # TODO (Jen): add code for runnning PHALP somewhere.
-        person_to_detection_map = {}
-        
-        suffix = '_openpose_transreid_max_age_10_ghost_head_fast_may'
-
-        phalp_detections = os.path.join(out_folder, "../phalp_detection{}.pickle".format(suffix))
-        phalp_results = os.path.join(out_folder, "../phalp_results{}.pickle".format(suffix))
-        phalp_visuals = os.path.join(out_folder, "../phalp_visuals{}.pickle".format(suffix))
-
-        with open(phalp_detections, "rb") as f:
-            detections = pickle.load(f)
-        with open(phalp_results, "rb") as f:
-            tracking_results = pickle.load(f)
-        with open(phalp_visuals, "rb") as f:
-            visuals = pickle.load(f)  # this contains all ghost detections
-        print(len(tracking_results), len(detections), len(visuals))
-        self.handle_ghost_detections(tracking_results, detections, visuals)
-
-
-        # match tracking results to detections by bounding box
-        track_id_to_detections = defaultdict(list)
-        num_ghost_detections = 0
-
-        detections_by_frame = defaultdict(list)
-        for frame_id in range(len(detections)):
-            for det in detections[frame_id]:
-                detections_by_frame[det["img_name"]].append(det)
-        
-        frame_list = sorted(list(tracking_results.keys()))
-        # track_body_types = {}
-        adult_counts_per_image = {}
-        infant_counts_per_image = {}
-        for _, frame_name in enumerate(frame_list):  # 'frame000089.jpg'
-            # frame_id = int(frame_name.split('.')[0].split('frame')[-1])
-            tracking_res = tracking_results[frame_name]  # e.g. [[8, 9], [[153.0, 5.0, 484.0, 763.0], [711.0, 1.0, 335.0, 839.0]], 89]
-            det_res = detections_by_frame[frame_name]  # e.g. [{'bbox': [153, 5, 484, 763], 'time': 89, 'img_name': 'frame000089.jpg', 'det_index': 0, 'keypoints_25': ..},..]
-            # assert (len(det_res) ==0 or det_res[0]["img_name"] == frame_name)
-            adult_counts_per_image[frame_name] = sum([det.get("class_id", "")=="adult" for det in det_res])
-            infant_counts_per_image[frame_name] = sum([det.get("class_id", "")=="infant" for det in det_res])
-            for track_id, track_box in zip(tracking_res[0], tracking_res[1]):
-                for det_id, det in enumerate(det_res):
-                    if np.array_equal(det["bbox"], track_box):
-                        track_id_to_detections[track_id].append(det)
-                        track_to_id[track_id].append(num_persons)
-                        id_to_track[num_persons] = track_id
-                        person_to_img_map[num_persons] = (frame_name, det["det_index"])
-                        person_to_detection_map[num_persons] = det
-                        num_persons += 1
-                        # if track_id in track_body_types.keys() or "ghost" in det.keys():
-                        #     continue
-                        # else:
-                        #     track_body_types[track_id] = (det["class_id"], None)
-                            
-                       
-                        if "ghost" in det.keys():
-                            num_ghost_detections += 1
-
-        logger.info('{} persons from {} tracks detected in {} images.'.format(num_persons, len(track_to_id), len(frame_list)))
-        logger.info("{} of them are ghost detections from PHALP.".format(num_ghost_detections))
-        self.person_to_detection_map = person_to_detection_map
-        self.num_ghost_detections = num_ghost_detections
 
     def get_sorted_track_by_body_type(self):
         tracks = self.track_body_types.keys()
@@ -230,22 +246,21 @@ class Dataset(data.Dataset):
         # kp_118[:25] = kp
         is_ghost = 'ghost' in detection.keys()
 
-        if kp[:, 2].sum() > 0:
-            crop_out = cropout_openpose_one_third(img, kp)
-            cropped_img = crop_out['cropped_image']  # cropped image
-            yhxw = np.array((crop_out['crop_boundary']['y'], crop_out['crop_boundary']['h'], 
-                    crop_out['crop_boundary']['x'], crop_out['crop_boundary']['w']))
-        else:
-            box_detectron2 = detection["bbox"]  # (x,y,w,h)
-            x,y,w,h = box_detectron2
-            center_x = (x+w/2)
-            center_y = (y+h/2)
-            side = max(w, h)
-            x_min, y_min, x_max, y_max = [center_x-side/2, center_y-side/2, center_x+side/2, center_y+side/2]
-            center = [center_x, center_y]
-            scale = max(x_max-x_min, y_max-y_min) * 1.2
-            cropped_img = crop(img, center, scale, [224,224], edge_padding=True).astype(np.uint8)
-            yhxw = np.array((y_min.item(),side.item(),x_min.item(),side.item()))
+        # if kp[:, 2].sum() > 0:
+        #     crop_out = cropout_openpose_one_third(img, kp)
+        #     cropped_img = crop_out['cropped_image']  # cropped image
+        #     yhxw = np.array((crop_out['crop_boundary']['y'], crop_out['crop_boundary']['h'], 
+        #             crop_out['crop_boundary']['x'], crop_out['crop_boundary']['w']))
+        # else:
+        x,y,w,h = detection["bbox"]  # (x,y,w,h)
+        center_x = (x+w/2)
+        center_y = (y+h/2)
+        side = max(w, h)
+        x_min, y_min, x_max, y_max = [center_x-side/2, center_y-side/2, center_x+side/2, center_y+side/2]
+        center = [center_x, center_y]
+        scale = max(x_max-x_min, y_max-y_min) * 1.2
+        cropped_img = crop(img, center, scale, [224,224], edge_padding=True).astype(np.uint8)
+        yhxw = np.array((y_min, side, x_min, side))
 
         track_id = self.id_to_track[idx]
         body_type = self.track_body_types[track_id][0]
