@@ -1,5 +1,5 @@
 from collections import defaultdict
-import os, sys
+import os, sys, json
 import os.path as osp
 import joblib
 import yaml
@@ -353,6 +353,9 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
         # returns a dictionary of results for each image
         filter_by_2dkp = args.pipeline == 1
         labels = get_downstream_labels(dataset, results_holder, filter_by_2dkp)
+
+        with open(os.path.join(out_folder, 'labels.json'), 'w') as f:
+            json.dump(labels, f)
     else:
         labels = None
 
@@ -362,7 +365,8 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
             skip_if_no_infant=False, device=device, save_mesh=args.save_mesh,
             camera_center=camera_center, img_list=None, 
             fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
-            add_ground_plane=normal_vec is not None, anchor=anchor, ground_normal=normal_vec)
+            add_ground_plane=normal_vec is not None, anchor=anchor, ground_normal=normal_vec,
+            renderer=args.renderer)
 
         if args.save_video:
             images_to_mp4(out_render_path, os.path.join(out_folder, 'video.mp4'), fps=args.fps)

@@ -13,7 +13,7 @@ import pyrender
 
 from hps.body_model import init_body_model
 from utils.geometry import batch_euler2matrix
-from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera, rotation_matrix_between_vectors
+from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera, rotation_matrix_between_vectors, perspective_projection
 from visualization.keypoints import draw_skeleton
 from postprocess.filter_frames import keep_frame
 from downstream.calc_downstream import pose_str_map, touch_str_map, visibility_str_map
@@ -23,7 +23,7 @@ colors = get_colors()
 def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
            camera_center=np.array([960, 540]), img_list=None, fast_render=True, use_smoothed=False,
            add_ground_plane=False, anchor=None, ground_normal=None, top_view=False,
-           keep_criterion='all'):
+           keep_criterion='all', renderer='pyrender'):
     """Generate meshes from the saved estimated SMPL parameters, and then render.
 
     anchor: a point on the ground plane
@@ -129,7 +129,7 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
             faces=faces, keypoints_2d=keypoints_2d, track_ids=track_ids, save_filename=save_filename,
             mesh_color=mesh_colors, desc=desc, mesh_filename=mesh_filename, fast_render=fast_render, add_ground_plane=add_ground_plane,
             anchor=anchor, ground_normal=ground_normal,
-            top_view=top_view)
+            top_view=top_view, renderer=renderer)
 
 
 def render_image_group(
@@ -148,7 +148,7 @@ def render_image_group(
         track_ids = None,
         anchor=None, ground_normal=None,
         desc=[], fast_render=True, add_ground_plane=False,
-        top_view=False
+        top_view=False, renderer='pyrender'
 ):
     try:
         image = cv2.imread(image_fn)[:,:,::-1]
@@ -184,7 +184,7 @@ def render_image_group(
     rendered_images = []
     for camera_pose, cam_dist_scalar in zip(camera_poses, cam_dist_scalars):
         rendered_img = render_with_pyrender(
-            image=np.zeros_like(image),
+            image=image, #np.zeros_like(image),
             camera_translations=camera_translation,
             vertices=vertices,
             camera_rotation=camera_rotation,
@@ -196,7 +196,8 @@ def render_image_group(
             mesh_filename=mesh_filename,
             camera_pose=camera_pose,
             cam_dist_scalar=cam_dist_scalar,
-            anchor=anchor, ground_normal=ground_normal, fast_render=fast_render, add_ground_plane=add_ground_plane
+            anchor=anchor, ground_normal=ground_normal, fast_render=fast_render, add_ground_plane=add_ground_plane,
+            renderer=renderer
         )
         rendered_images.append(rendered_img)
     output_img = np.concatenate([image, *rendered_images], axis=1)
@@ -243,7 +244,7 @@ def render_with_pyrender(
         mesh_filename: str = None,
         add_ground_plane: bool = True,
         anchor=None, ground_normal=None,
-        fast_render: bool=True
+        fast_render: bool=True, renderer='pyrender'
 ) -> np.ndarray:
     num_persons = len(vertices)
     scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0],
@@ -319,18 +320,36 @@ def render_with_pyrender(
         light_pose[:3, 3] = np.array([1, 1, 2])
         scene.add(light, pose=light_pose)
 
-    renderer = pyrender.OffscreenRenderer(
-        viewport_width=image.shape[1],
-        viewport_height=image.shape[0],
-        point_size=1.0
-    )
-    try:
-        color, rend_depth = renderer.render(scene, flags=pyrender.RenderFlags.RGBA)
-    except:
-        print('Error rendering image. Skipping...')
-        return image
-    color = color.astype(np.float32) / 255.0
-    valid_mask = (rend_depth > 0)[:, :, None]
-    output_img = (color[:, :, :3] * valid_mask + (1 - valid_mask) * image)
+    if renderer == 'pyrender':
+        renderer = pyrender.OffscreenRenderer(
+            viewport_width=image.shape[1],
+            viewport_height=image.shape[0],
+            point_size=1.0
+        )
+        try:
+            color, rend_depth = renderer.render(scene, flags=pyrender.RenderFlags.RGBA)
+        except:
+            print('Error rendering image. Skipping...')
+            return image
+        color = color.astype(np.float32) / 255.0
+        valid_mask = (rend_depth > 0)[:, :, None]
+        output_img = (color[:, :, :3] * valid_mask + (1 - valid_mask) * image)
+
+    elif renderer == 'sim3drender':
+        from vis_human.sim3drender import Sim3DR
+        renderer = Sim3DR(color_directional=[0.5, 0.5, 0.5])
+        cam_preds = torch.tensor(camera_translations).float().cuda()
+        vertices = torch.tensor(vertices).float().cuda()
+        
+        verts, K = perspective_projection(vertices, cam_preds, focal_length=focal_length[0], camera_center=torch.tensor(camera_center).cuda())
+        verts = torch.cat([verts, vertices[:,:,[2]]], -1)
+        verts[:, :, 2] *= -1
+        mesh_colors = np.array([colors[mesh_colors[idx]] for idx in range(num_persons)]) / 255.
+        faces = faces[0].astype(np.int32)
+        verts[:, :, 2] *= max(image.shape[:2])
+
+        output_img = renderer(verts.cpu().numpy(), faces, (image*255).astype(np.uint8), mesh_colors=mesh_colors)
+        output_img = output_img.astype(np.float32) / 255.
+        # cv2.imwrite("demo.png", output_img[:,:,::-1])
     return output_img
 

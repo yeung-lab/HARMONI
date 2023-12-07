@@ -87,3 +87,47 @@ def rotation_matrix_between_vectors(v1, v2):
     rotation_matrix = np.eye(3) + skew_symmetric_matrix + np.dot(skew_symmetric_matrix, skew_symmetric_matrix) * (1 / (1 + dot_product))
 
     return rotation_matrix
+
+
+def perspective_projection(points, translation=None,rotation=None, keep_dim=False, 
+                           focal_length=5000, camera_center=None):
+    """
+    This function computes the perspective projection of a set of points.
+    Input:
+        points (bs, N, 3): 3D points
+        rotation (bs, 3, 3): Camera rotation
+        translation (bs, 3): Camera translation
+        focal_length (bs,) or scalar: Focal length
+        camera_center (bs, 2): Camera center
+    """
+    if isinstance(points,np.ndarray):
+        points = torch.from_numpy(points).float()
+    if isinstance(translation,np.ndarray):
+        translation = torch.from_numpy(translation).float()
+    batch_size = points.shape[0]
+    K = torch.zeros([batch_size, 3, 3], device=points.device)
+    K[:,0,0] = focal_length
+    K[:,1,1] = focal_length
+    K[:,2,2] = 1.
+    if camera_center is not None:
+        K[:,-1, :-1] = camera_center
+
+    # Transform points
+    if rotation is not None:
+        points = torch.einsum('bij,bkj->bki', rotation, points)
+    if translation is not None:
+        points = points + translation.unsqueeze(1)
+
+    # Apply perspective distortion
+    projected_points = points / (points[:,:,-1].unsqueeze(-1)+1e-4)
+    if torch.isnan(points).sum()>0 or torch.isnan(projected_points).sum()>0:
+       print('translation:', translation[torch.where(torch.isnan(translation))[0]])
+       print('points nan value number:', len(torch.where(torch.isnan(points))[0]))
+
+    # Apply camera intrinsics
+    # projected_points = torch.einsum('bij,bkj->bki', K, projected_points)[:, :, :-1]
+    projected_points = torch.matmul(projected_points.contiguous(), K.contiguous())
+    if not keep_dim:
+        projected_points = projected_points[:, :, :-1].contiguous()
+
+    return projected_points, K
