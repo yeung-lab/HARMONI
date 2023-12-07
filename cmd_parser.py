@@ -44,6 +44,7 @@ def parse_config(argv=None):
     parser.add_argument('--render_only', default=False, action='store_true', 
                         help='Only render the results. Assuming there is already a results.pt file in the result folder.')
     parser.add_argument('--render', default=False, action='store_true')
+    parser.add_argument('--renderer', default="pyrender", choices=['pyrender', 'sim3drender'], help='Which renderer to use.')
     parser.add_argument('--top_view', default=False, action='store_true')
     parser.add_argument('--save_video', default=False, action='store_true')
     parser.add_argument('--save_gif', default=False, action='store_true')
