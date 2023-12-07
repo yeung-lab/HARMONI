@@ -91,6 +91,7 @@ class Dataset(data.Dataset):
             track_id_to_detections = defaultdict(list)
 
             for img_id, detections in enumerate(detection_list):
+                if len(detections) == 0: continue
                 img_name = os.path.basename(detections[0][0])
                 img_to_img_id[img_name] = img_id
                 

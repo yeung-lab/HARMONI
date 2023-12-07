@@ -1,5 +1,6 @@
 import numpy as np
 import trimesh
+import torch
 
 
 def get_colors():

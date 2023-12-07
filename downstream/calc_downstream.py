@@ -120,14 +120,27 @@ def is_visible(joints, other_joints, max_distance=1.8, fov=120):
     """Returns True if the other person's head is in the visible cone of the person's eyes.
     """
     reye, leye, rear, lear, nose, neck = joints[15], joints[16], joints[17], joints[18], joints[0], joints[1]
-    eye_mid = (reye+leye)/2
-    a, b, c, _ = get_plane(rear, lear, neck, anchor=eye_mid)
+    if rear.sum() == 0 or lear.sum() == 0:
+        view_start = (reye+leye)/2
+        a, b, c, _ = get_plane(reye, leye, neck, anchor=view_start)
+    else:
+        assert rear.sum() != 0 and lear.sum() != 0
+        view_start = (rear+lear)/2
+        a, b, c, _ = get_plane(rear, lear, neck, anchor=view_start)
+
+    assert nose.sum() != 0
+    assert neck.sum() != 0
+    assert view_start.sum() != 0
+
     view_direction = np.array([a, b, c]) / np.linalg.norm(np.array([a, b, c]))
-    if not is_in_cone(eye_mid, view_direction, nose, max_distance, fov)[0]:
+
+    if not is_in_cone(view_start, view_direction, nose, max_distance, fov)[0]:
         view_direction = -view_direction
-    assert is_in_cone(eye_mid, view_direction, nose, max_distance, fov)[0]
+
+    assert is_in_cone(view_start, view_direction, nose, max_distance, fov)[0]
+
     for i in [15, 16, 17, 18]: # only check the other person's head joints
-        flag, angle, distance = is_in_cone(eye_mid, view_direction, other_joints[i], max_distance, fov)
+        flag, angle, distance = is_in_cone(view_start, view_direction, other_joints[i], max_distance, fov)
         if flag:
             return True, angle, distance
     return False, angle, distance  # angle of the nose
@@ -282,12 +295,12 @@ def get_downstream_labels(dataset, results, filter_by_2dkp):
             joint_dist_3d = -1
 
         labels[img_name] = {
-            'pose': pose_id,
-            'visibility': visibility,
-            'touch': touch,
-            'adult_angle': adult_angle,
-            'infant_angle': infant_angle,
-            'distance': distance[img_idx]
+            'pose': int(pose_id),
+            'visibility': int(visibility),
+            'touch': int(touch),
+            'adult_angle': float(adult_angle),
+            'infant_angle': float(infant_angle),
+            'distance': float(distance[img_idx])
         }
 
     return labels

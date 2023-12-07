@@ -57,13 +57,11 @@ def run_on_images(image_paths, args=None):
 
 
 def phrase_to_type(phrase):
-    if 'baby' in phrase.lower():
-        return 'infant'
-    elif 'adult' in phrase.lower():
-        return 'adult'
-    elif 'child' in phrase.lower():
-        return 'infant'
-    elif 'parent' in phrase.lower():
+    adult_phrases = ['adult', 'parent', 'human']
+    baby_phrases = ['baby', 'child']
+    if any([p in phrase.lower() for p in baby_phrases]):
+        return 'baby'
+    elif any([p in phrase.lower() for p in adult_phrases]):
         return 'adult'
     else:
         raise ValueError('Unknown phrase: {}'.format(phrase))
