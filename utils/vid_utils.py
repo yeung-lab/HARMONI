@@ -96,7 +96,8 @@ def repeat_gif(gif_path, output_path, num_repeats):
 
 
 def images_to_mp4(image_dir, vid_path, fps):
-    vid = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (960, 440))
+    image_height, image_width, _ = cv2.imread(os.path.join(image_dir, os.listdir(image_dir)[0])).shape
+    vid = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (image_width, image_height))
     for filename in sorted(os.listdir(image_dir)):
         if os.path.splitext(filename)[1] in image_exts and not filename.startswith("."):
             image = cv2.imread(os.path.join(image_dir, filename))

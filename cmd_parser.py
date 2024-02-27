@@ -31,6 +31,9 @@ def parse_config(argv=None):
 
     parser.add_argument('--hps', type=str, default='dapa', choices=['dapa', 'cliff'], 
                         help='The hps model being used')
+    parser.add_argument('--smpl_model', type=str, default='smpla', choices=['smpl_smil', 'smpla'], 
+                        help='If smpl_smil, use the smil for infant. Otherwise, use smpla for both adult and child.')
+    parser.add_argument('--kid_age', type=float, default=1.0, help='The age offset of the kid. Only used when smpla is used.')
     
     parser.add_argument('--run_smplify', default=False, action='store_true')
     parser.add_argument('--ground_constraint', default=False, action='store_true')

@@ -139,7 +139,8 @@ def is_visible(joints, other_joints, max_distance=1.8, fov=120):
 
     assert is_in_cone(view_start, view_direction, nose, max_distance, fov)[0]
 
-    for i in [15, 16, 17, 18]: # only check the other person's head joints
+    for i in range(19): #[15, 16, 17, 18]: # only check the other person's head joints
+        if other_joints[i].sum() == 0: continue
         flag, angle, distance = is_in_cone(view_start, view_direction, other_joints[i], max_distance, fov)
         if flag:
             return True, angle, distance
@@ -216,7 +217,8 @@ def get_downstream_labels(dataset, results, filter_by_2dkp):
             joints_adult[img_idx] = adult_joints[:25]
         
         if sum(valid_infant_idxs) != 0 and sum(valid_adult_idxs) != 0:
-            distance[img_idx] = np.linalg.norm(infant_joints[:25] - adult_joints[:25]) / focal_factor
+            # calculate min distance between the any of the infant joints and any of the adult joints. ie. pairwise distance.
+            distance[img_idx] = np.sqrt(np.square(infant_joints[:25, None, :] - adult_joints[:25]).sum(2)).min() / focal_factor 
 
         if exist_dyad:
             infant_pid = np.array(infant_pids)[valid_infant_idxs][0]

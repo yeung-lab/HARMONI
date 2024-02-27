@@ -132,3 +132,47 @@ def perspective_projection(points, translation=None,rotation=None, keep_dim=Fals
         projected_points = projected_points[:, :, :-1].contiguous()
 
     return projected_points, K
+
+
+def get_rotate_x_mat(angle):
+    angle = np.radians(angle)
+    rot_mat = torch.Tensor([
+        [1, 0, 0], 
+        [0, np.cos(angle), -np.sin(angle)],
+        [0, np.sin(angle), np.cos(angle)]])
+    return rot_mat
+
+def get_rotate_y_mat(angle):
+    angle = np.radians(angle)
+    rot_mat = torch.Tensor([
+        [np.cos(angle), 0, np.sin(angle)], 
+        [0, 1, 0],
+        [-np.sin(angle), 0, np.cos(angle)]])
+    return rot_mat
+
+def rotate_view_weak_perspective(verts, rx=30, ry=0, img_shape=[512,512], expand_ratio=1.2, bbox3D_center=None, scale=None):
+    device, dtype = verts.device, verts.dtype
+    h, w = img_shape
+    
+    # front2birdview: rx=90, ry=0 ; front2sideview: rx=0, ry=90
+    Rx_mat = get_rotate_x_mat(rx).type(dtype).to(device)
+    Ry_mat = get_rotate_y_mat(ry).type(dtype).to(device)
+    verts_rot = torch.einsum('bij,kj->bik', verts, Rx_mat)
+    verts_rot = torch.einsum('bij,kj->bik', verts_rot, Ry_mat)
+    
+    if bbox3D_center is None:
+        flatten_verts = verts_rot.view(-1, 3)
+        # To move the vertices to the center of view, we get the bounding box of vertices and its center location 
+        bbox3D_center = 0.5 * (flatten_verts.min(0).values + flatten_verts.max(0).values)[None, None]
+    verts_aligned = verts_rot - bbox3D_center
+    
+    rendered_image_center = torch.Tensor([[[w / 2, h / 2]]]).to(device).type(verts_aligned.dtype)
+    
+    if scale is None:
+        # To ensure all vertices are visible, we need to rescale the vertices
+        scale = 1 / (expand_ratio * torch.abs(torch.div(verts_aligned[:,:,:2], rendered_image_center)).max()) 
+    # move to the center of rendered image 
+    verts_aligned *=  scale
+    verts_aligned[:,:,:2] += rendered_image_center
+
+    return verts_aligned, bbox3D_center, scale

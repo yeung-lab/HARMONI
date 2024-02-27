@@ -17,7 +17,7 @@ import hps
 from dataset import Dataset
 from results import Results
 from utils.vid_utils import video_to_images, images_to_gif, images_to_mp4
-from hps.dapa.dapa_utils import get_original, collect_results_for_image_dapa
+from hps.smpl_utils import get_original, collect_results_for_image_dapa, cam_crop2full
 from postprocess.temporal_smplify import TemporalSMPLify
 from postprocess.one_euro_filter import OneEuroFilter
 from visualization.pyrender import render
@@ -126,7 +126,7 @@ def main(args):
             cliff_model.load_state_dict(state_dict, strict=True)
             cliff_model.eval()
 
-            infant_model = hps.get_dapa_model(cfg.dapa_child_model, cfg.smpl_mean_params).cuda().eval()
+            # infant_model = hps.get_dapa_model(cfg.dapa_child_model, cfg.smpl_mean_params).cuda().eval()
         else:
             create_body_pose = False  # if use vposer, then create_body_pose = False
             raise NotImplementedError('Unknown hps model: ' + args.hps)
@@ -182,7 +182,9 @@ def main(args):
                 batch_pidxs = pidxs[batch_start_i: batch_start_i+batch_size]
                 cur_batch_size = len(batch_pidxs)
                 batch = dataloader.collate_fn([dataset[i] for i in batch_pidxs])
-
+                yhxw = batch['yhxw']
+                cx, cy = yhxw[:, 2] + yhxw[:, 3] / 2., yhxw[:, 0] + yhxw[:, 1] / 2.
+                
                 start_image_id = dataset.img_to_img_id[batch['img_name'][0]]
 
                 ####################################
@@ -205,30 +207,28 @@ def main(args):
 
                     normal_vec = torch.from_numpy(normal_vec).to(device).float()
 
-                if body_type == 'infant':
-                    with torch.no_grad():
-                        pred_rotmat, pred_betas, pred_camera = infant_model(batch['norm_cropped_img'].to(device))
-                else:
-                    if args.hps == 'dapa':
+                if args.hps == 'dapa':
+                    if body_type == 'adult':
                         with torch.no_grad():
                             pred_rotmat, pred_betas, pred_camera = adult_model(batch['norm_cropped_img'].to(device))
-
-                    elif args.hps == 'cliff':
-                        norm_img = batch['norm_cropped_img'].to(device)
-                        yhxw = batch['yhxw']
-                        cx, cy = yhxw[:, 2] + yhxw[:, 3] / 2., yhxw[:, 0] + yhxw[:, 1] / 2.
-                        b = torch.max(yhxw[:, 1], yhxw[:, 3])
-                        img_w, img_h = orig_img_width, orig_img_height
-                        bbox_info = torch.stack([cx - img_w / 2., cy - img_h / 2., b], dim=-1).to(device).float()
-                        # The constants below are used for normalization, and calculated from H36M data.
-                        # It should be fine if you use the plain Equation (5) in the paper.
-                        bbox_info[:, :2] = bbox_info[:, :2] / cam_focal_length * 2.8  # [-1, 1]
-                        bbox_info[:, 2] = (bbox_info[:, 2] - 0.24 * cam_focal_length) / (0.06 * cam_focal_length)  # [-1, 1]
-
-                        with torch.no_grad():
-                            pred_rotmat, pred_betas, pred_camera = cliff_model(norm_img, bbox_info)
                     else:
-                        raise NotImplementedError('Unknown hps model: ' + args.hps)
+                        with torch.no_grad():
+                            pred_rotmat, pred_betas, pred_camera = infant_model(batch['norm_cropped_img'].to(device))
+
+                elif args.hps == 'cliff':
+                    norm_img = batch['norm_cropped_img'].to(device)
+                    b = torch.max(yhxw[:, 1], yhxw[:, 3])
+                    img_w, img_h = orig_img_width, orig_img_height
+                    bbox_info = torch.stack([cx - img_w / 2., cy - img_h / 2., b], dim=-1).to(device).float()
+                    # The constants below are used for normalization, and calculated from H36M data.
+                    # It should be fine if you use the plain Equation (5) in the paper.
+                    bbox_info[:, :2] = bbox_info[:, :2] / cam_focal_length * 2.8  # [-1, 1]
+                    bbox_info[:, 2] = (bbox_info[:, 2] - 0.24 * cam_focal_length) / (0.06 * cam_focal_length)  # [-1, 1]
+
+                    with torch.no_grad():
+                        pred_rotmat, pred_betas, pred_camera = cliff_model(norm_img, bbox_info)
+                else:
+                    raise NotImplementedError('Unknown hps model: ' + args.hps)
                 
                 init_betas = pred_betas
                 pred_rotmat_hom = torch.cat(
@@ -240,24 +240,26 @@ def main(args):
                 init_global_orient = pred_pose[:,:3]
                 init_pose = pred_pose[:, 3:]
 
-                # also pass in the transl, which is converted from pred_camera
-                yhwx = batch['yhxw']
-                y, h, x = yhwx[:,0], yhwx[:,1], yhwx[:,2]
-                init_transl = []
-                for i in range(cur_batch_size):
-                    trans = get_original(pred_camera[i].detach().cpu().numpy(), x[i], y[i], h[i], cam_focal_length, 
-                                        orig_img_width, orig_img_height)
-                    init_transl.append(torch.from_numpy(trans))
-                init_transl = torch.stack(init_transl).type(pred_camera.dtype).to(pred_camera.device)
+                focal_length = torch.tensor([cam_focal_length], dtype=torch.float32, device=device).expand(cur_batch_size)
+                full_image_shape = torch.tensor([orig_img_height, orig_img_width]).to(device).float().unsqueeze(0).expand(cur_batch_size, -1)
+                scale = torch.max(yhxw[:, 1], yhxw[:, 3]).to(device) / 200
+                center = torch.stack((cx, cy), dim=-1).to(device)
+                init_transl = cam_crop2full(pred_camera, center, scale, full_image_shape, focal_length)
 
-                
+                if args.hps == 'cliff' and body_type == 'infant':
+                    print('Scaling down the camera focal length for infants')
+                    init_transl[:, 0] *= 0.5  # x axis.
+                    init_transl[:, 1] *= 0.3  # y axis.
+                    init_transl[:, 2] *= 0.2
+  
                 ##############################################
                 # Collect results and optionally run SMPLify #
                 ##############################################
                 if not args.run_smplify or (not refine_with_ground):
                     # parse results
                     _, results_batch = collect_results_for_image_dapa(
-                        pred_pose, pred_betas, pred_camera, None, batch, cam_focal_length, orig_img_width, orig_img_height)
+                        pred_pose, pred_betas, pred_camera, None, batch, cam_focal_length, orig_img_width, orig_img_height,
+                        smpl_type=args.smpl_model, kid_age=args.kid_age)
                     # update results in this batch
                     results_holder.update_results(batch['idx'].numpy(), results_batch)
                 else:
@@ -273,7 +275,8 @@ def main(args):
                     refined_betas = refined_thetas[:, -10:]
                     
                     _, results_batch = collect_results_for_image_dapa(
-                        refined_pose, refined_betas, pred_camera, refined_transl, batch, cam_focal_length, orig_img_width, orig_img_height)
+                        refined_pose, refined_betas, pred_camera, refined_transl, batch, cam_focal_length, orig_img_width, orig_img_height,
+                        smpl_type=args.smpl_model, kid_age=args.kid_age)
 
                     results_holder.update_results(batch['idx'].numpy(), results_batch)
 
@@ -366,7 +369,7 @@ def post_fitting(dataset, results_holder, out_folder, cfg, device, args,
             camera_center=camera_center, img_list=None, 
             fast_render=True, top_view=args.top_view, keep_criterion=args.keep,
             add_ground_plane=normal_vec is not None, anchor=anchor, ground_normal=normal_vec,
-            renderer=args.renderer)
+            renderer=args.renderer, smpl_type=args.smpl_model, kid_age=args.kid_age)
 
         if args.save_video:
             images_to_mp4(out_render_path, os.path.join(out_folder, 'video.mp4'), fps=args.fps)

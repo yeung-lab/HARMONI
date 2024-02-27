@@ -12,8 +12,9 @@ import trimesh
 import pyrender
 
 from hps.body_model import init_body_model
+from hps.smpla import prepare_smpla_model
 from utils.geometry import batch_euler2matrix
-from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera, rotation_matrix_between_vectors, perspective_projection
+from visualization.utils import get_colors, get_checkerboard_plane, look_at_camera, rotation_matrix_between_vectors, perspective_projection, rotate_view_weak_perspective
 from visualization.keypoints import draw_skeleton
 from postprocess.filter_frames import keep_frame
 from downstream.calc_downstream import pose_str_map, touch_str_map, visibility_str_map
@@ -23,7 +24,7 @@ colors = get_colors()
 def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
            camera_center=np.array([960, 540]), img_list=None, fast_render=True, use_smoothed=False,
            add_ground_plane=False, anchor=None, ground_normal=None, top_view=False,
-           keep_criterion='all', renderer='pyrender'):
+           keep_criterion='all', renderer='pyrender', smpl_type='smpl_smil', kid_age=1.0):
     """Generate meshes from the saved estimated SMPL parameters, and then render.
 
     anchor: a point on the ground plane
@@ -31,6 +32,7 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
     """
     adult_bm = init_body_model(cfg.smpl_model_path, batch_size=1, create_body_pose=True).to(device)
     infant_bm = init_body_model(cfg.smil_model_path, batch_size=1, create_body_pose=True).to(device)
+    smpla_bm = prepare_smpla_model(torch.float32, 'neutral').to(device)
     smpl_faces = adult_bm.faces
 
     img_to_persons = defaultdict(list)
@@ -93,14 +95,29 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
             global_orient = to_tensor(result['global_orient'])
             faces.append(smpl_faces)
 
-            if result['model_type'] == 'smpl':
-                bm = adult_bm(global_orient=global_orient, body_pose=pose, betas=betas)
-                mesh_color = 'green'
-            elif result['model_type'] == 'smil':
-                bm = infant_bm(global_orient=global_orient, body_pose=pose, betas=betas)
-                mesh_color = 'blue'
+            if smpl_type == 'smpl_smil':
+                if result['model_type'] == 'smpl':
+                    bm = adult_bm(global_orient=global_orient, body_pose=pose, betas=betas)
+                    mesh_color = 'green'
+                elif result['model_type'] == 'smil':
+                    bm = infant_bm(global_orient=global_orient, body_pose=pose, betas=betas)
+                    mesh_color = 'blue'
+                else:
+                    raise Exception()
+                verts = bm.vertices
             else:
-                raise Exception()
+                
+                if result['model_type'] == 'smil':
+                    betas = torch.cat([betas*0, torch.zeros_like(betas[:, :1]) + kid_age], dim=1)
+                    full_pose = torch.cat([global_orient, pose], dim=1)
+                    verts, _ = smpla_bm(betas, full_pose, root_align=True)
+                    verts[:, :, 1] += 0.2  #  -0.05 -> 1.5
+                    verts[:, :, 2] += 2.
+                    mesh_color = 'purple'
+                else:
+                    bm = adult_bm(global_orient=global_orient, body_pose=pose, betas=betas)
+                    verts = bm.vertices
+                    mesh_color = 'green'
 
             if kp_2d is None or is_ghost:
                 mesh_color = 'red'
@@ -111,7 +128,7 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
             keypoints_2d.append(kp_2d)
             mesh_colors.append(mesh_color)
             camera_translations.append(result['transl'][0])
-            vertices.append(to_numpy(bm.vertices)[0])
+            vertices.append(to_numpy(verts)[0])
             track_ids.append(dataset.id_to_track[person_id])
         
         save_filename = os.path.join(save_folder, img_name)
@@ -184,7 +201,7 @@ def render_image_group(
     rendered_images = []
     for camera_pose, cam_dist_scalar in zip(camera_poses, cam_dist_scalars):
         rendered_img = render_with_pyrender(
-            image=image, #np.zeros_like(image),
+            image=np.zeros_like(image),
             camera_translations=camera_translation,
             vertices=vertices,
             camera_rotation=camera_rotation,
@@ -337,7 +354,7 @@ def render_with_pyrender(
 
     elif renderer == 'sim3drender':
         from vis_human.sim3drender import Sim3DR
-        renderer = Sim3DR(color_directional=[0.5, 0.5, 0.5])
+        renderer = Sim3DR()
         cam_preds = torch.tensor(camera_translations).float().cuda()
         vertices = torch.tensor(vertices).float().cuda()
         
@@ -350,6 +367,15 @@ def render_with_pyrender(
 
         output_img = renderer(verts.cpu().numpy(), faces, (image*255).astype(np.uint8), mesh_colors=mesh_colors)
         output_img = output_img.astype(np.float32) / 255.
+
+        # add bird's eye view
+        verts_tran = vertices + cam_preds.unsqueeze(1)
+        verts_bird_view, bbox3D_center, scale = rotate_view_weak_perspective(verts_tran, rx=-90, ry=0, img_shape=image.shape[:2], expand_ratio=1.2)
+        output_img_sideview = renderer(verts_bird_view.cpu().numpy(), faces, (image*255).astype(np.uint8), mesh_colors=mesh_colors)
+        output_img_sideview = output_img_sideview.astype(np.float32) / 255.
+        # import pdb; pdb.set_trace()
+        output_img = np.concatenate([output_img, output_img_sideview], axis=1)
+
         # cv2.imwrite("demo.png", output_img[:,:,::-1])
     return output_img
 
