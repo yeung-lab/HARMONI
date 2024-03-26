@@ -176,7 +176,7 @@ def find_adult_and_infant(gt_joints):
 seq_names = ['170915_toddler5', '160906_ian1', '160906_ian2', '160906_ian3', '160906_ian5']
 data_path = '/pasteur/data/cmu_panoptic/panoptic-toolbox/scripts'
 # for seq_name in seq_names:
-seq_name = seq_names[0]
+seq_name = seq_names[4]
 annotations = glob(os.path.join(data_path, seq_name, 'hdPose3d_stage1_coco19', 'body3DScene_*.json'))
 
 calib_json = os.path.join(data_path, seq_name, 'calibration_{:s}.json'.format(seq_name))
@@ -371,9 +371,10 @@ err_df.loc['max'] = vis_and_touch.max()
 err_df.loc['min'] = vis_and_touch.min()
 err_df.loc['25%'] = vis_and_touch.quantile(0.25)
 err_df.loc['75%'] = vis_and_touch.quantile(0.75)
+err_df.loc['90%'] = vis_and_touch.quantile(0.9)
 err_df.to_csv(f'labels_df_{seq_name}.csv')
 print(err_df)
-import pdb; pdb.set_trace()
+# import pdb; pdb.set_trace()
 
 # sbatch evaluation/cmu_panoptic/cmu_panoptic.sh
 

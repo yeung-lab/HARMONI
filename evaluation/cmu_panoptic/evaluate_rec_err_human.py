@@ -169,117 +169,132 @@ def visualize_skel(pred_joints, gt_joints):
     plt.savefig('test.png')
 
 
-seq_names = ['170915_toddler5', '160906_ian1', '160906_ian2', '160906_ian3', '160906_ian5']
 data_path = '/pasteur/data/cmu_panoptic/panoptic-toolbox/scripts'
-for seq_name in seq_names:
-        
-    annotations = glob(os.path.join(data_path, seq_name, 'hdPose3d_stage1_coco19', 'body3DScene_*.json'))
-    err_df = {
-        'view': [],
-        'adult_pck': [],
-        'infant_pck': []
-    }
+err_df = {
+    'adult_seq_cam': [],
+    'infant_seq_cam': [],
+    'adult_pck': [],
+    'infant_pck': []
+}
 
-    # Read camera parameters
-    calib_json = os.path.join(data_path, seq_name, 'calibration_{:s}.json'.format(seq_name))
-    with open(calib_json, 'r') as f:
-        calib = json.load(f)
+gt_annotations = parse_human_annotations()
+annotated_frames = gt_annotations.keys()
+annotated_frames = sorted(list(annotated_frames))
 
-    # Cameras are identified by a tuple of (panel#,node#)
-    cameras = {(cam['panel'],cam['node']):cam for cam in calib['cameras']}
+seq_cam_to_frames = defaultdict(list)
+for annotated_frame_name in annotated_frames:
+    seq_name = '_'.join(annotated_frame_name.split('_')[:2])
+    camera_idx = int(annotated_frame_name.split('_')[3])
+    frame_idx = int(annotated_frame_name.split('_')[-1].split('.')[0])
+    seq_cam_to_frames[(seq_name, camera_idx)].append(annotated_frame_name)
 
-    # Convert data into numpy arrays for convenience
-    for k,cam in cameras.items():    
-        cam['K'] = np.matrix(cam['K'])
-        cam['distCoef'] = np.array(cam['distCoef'])
-        cam['R'] = np.matrix(cam['R'])
-        cam['t'] = np.array(cam['t']).reshape((3,1))
+for (seq_name, camera_idx), annotated_frame_names in tqdm(seq_cam_to_frames.items()):
+    pred_results_path = os.path.join('/pasteur/data/cmu_panoptic/results', 'smpla_cliff', '{}_hd_00_{:02d}'.format(seq_name, camera_idx), 'results.pt')
+    pred_labels_path = os.path.join('/pasteur/data/cmu_panoptic/results', 'smpla_cliff', '{}_hd_00_{:02d}'.format(seq_name, camera_idx), 'labels.json')
 
-    gt_annotations = parse_human_annotations()
-    annotated_frames = gt_annotations.keys()
-    annotated_frames = sorted(list(annotated_frames))
+    try:
+        pred_results = joblib.load(pred_results_path)
+    except:
+        print('skipping frame {} bc no predictions'.format(frame_idx))
+        continue
 
-    seq_cam_to_frames = defaultdict(list)
-    for annotated_frame_name in annotated_frames:
-        seq_name = '_'.join(annotated_frame_name.split('_')[:2])
-        camera_idx = int(annotated_frame_name.split('_')[3])
+    image_name_to_results = defaultdict(list)
+    for pid, res in pred_results.results.items():
+        image_name_to_results[res['img_name']].append(res)
+
+    for annotated_frame_name in annotated_frame_names:
+        # 160401_ian1_00_01_00001721.jpg
         frame_idx = int(annotated_frame_name.split('_')[-1].split('.')[0])
-        seq_cam_to_frames[(seq_name, camera_idx)].append(annotated_frame_name)
 
-    for (seq_name, camera_idx), annotated_frame_names in tqdm(seq_cam_to_frames.items()):
-        pred_results_path = os.path.join('/pasteur/data/cmu_panoptic/results', 'smpla_cliff', '{}_hd_00_{:02d}'.format(seq_name, camera_idx), 'results.pt')
-        pred_labels_path = os.path.join('/pasteur/data/cmu_panoptic/results', 'smpla_cliff', '{}_hd_00_{:02d}'.format(seq_name, camera_idx), 'labels.json')
+        preds = image_name_to_results['frame_{0:08d}.jpg'.format(frame_idx)]
+        image_path = os.path.join(data_path, seq_name, 'hdImgs', '00_{:02d}'.format(camera_idx), '00_{:02d}_{:08d}.jpg'.format(camera_idx, frame_idx))
 
-        try:    
-            pred_results = joblib.load(pred_results_path)
-        except:
-            print('skipping frame {} bc no predictions'.format(frame_idx))
+        body_type = [pred['body_type'] for pred in preds]
+        if len(preds) < 2 or 'adult' not in body_type or 'infant' not in body_type:
+            # print('skipping frame {} bc not both adult and infant'.format(frame_idx))
             continue
 
-        image_name_to_results = defaultdict(list)
-        for pid, res in pred_results.results.items():
-            image_name_to_results[res['img_name']].append(res)
+        pred_joints = np.concatenate([pred['joints'] for pred in preds], axis=0)  # (N, 25, 3)      
+        pred_transl = np.stack([pred['transl'][0] for pred in preds])      
+        pred_joints = np.stack([convert_op25_to_coco19(j) for j in pred_joints])
+        pred_joints = np.stack([pred_joints[np.where(np.array(body_type)==pred_body_type)[0][0]] for pred_body_type in ["adult", "infant"]]) # (2, 19, 3)
 
-        for annotated_frame_name in annotated_frame_names:
-            # 160401_ian1_00_01_00001721.jpg
-            frame_idx = int(annotated_frame_name.split('_')[-1].split('.')[0])
+        image = cv2.imread(image_path)
+        for i, body_type in enumerate(["adult", "infant"]):
+            gt_keypoints_2d = gt_annotations[annotated_frame_name][i]
+            image_h, image_w, _ = image.shape
+            fov = 60
+            cam_focal_length = image_w / (2 * np.tan(fov * np.pi / 360))
+            pred_joints_2d = project_joints(pred_joints[i], cam_focal_length, (image_w/2, image_h/2))
 
-            preds = image_name_to_results['frame_{0:08d}.jpg'.format(frame_idx)]
-            image_path = os.path.join(data_path, seq_name, 'hdImgs', '00_{:02d}'.format(camera_idx), '00_{:02d}_{:08d}.jpg'.format(camera_idx, frame_idx))
+            if gt_keypoints_2d[9, 2] > 0 and gt_keypoints_2d[12, 2] > 0:
+                pred_center = pred_joints_2d[[9, 12]].mean(0, keepdims=True).mean(0, keepdims=True)
+                gt_center = gt_keypoints_2d[[9, 12], :2].mean(0, keepdims=True).mean(0, keepdims=True)
+                pred_joints_2d = pred_joints_2d - pred_center + gt_center
+            elif gt_keypoints_2d[9, 2] > 0:
+                pred_joints_2d = pred_joints_2d - pred_joints_2d[9] + gt_keypoints_2d[9, :2]
+            elif gt_keypoints_2d[12, 2] > 0:
+                pred_joints_2d = pred_joints_2d - pred_joints_2d[12] + gt_keypoints_2d[12, :2]
+            else:
+                gt_center = gt_keypoints_2d[gt_keypoints_2d[:, 2] > 0, :2].mean(0, keepdims=True).mean(0, keepdims=True)
+                pred_center = pred_joints_2d[gt_keypoints_2d[:, 2] > 0].mean(0, keepdims=True).mean(0, keepdims=True)
+                pred_joints_2d = pred_joints_2d - pred_center + gt_center
 
-            body_type = [pred['body_type'] for pred in preds]
-            if len(preds) < 2 or 'adult' not in body_type or 'infant' not in body_type:
-                # print('skipping frame {} bc not both adult and infant'.format(frame_idx))
+            valid_gt_keypoints = gt_keypoints_2d[:, 2] > 0
+            if valid_gt_keypoints.sum() < 2:
                 continue
+            diff_2d = np.linalg.norm(gt_keypoints_2d[valid_gt_keypoints, :2] - pred_joints_2d[valid_gt_keypoints], axis=1)
+            bbox_size = np.max(gt_keypoints_2d[valid_gt_keypoints, :2], axis=0) - np.min(gt_keypoints_2d[valid_gt_keypoints, :2], axis=0)
+            diff_2d = diff_2d / bbox_size.max()
+            pck = (diff_2d < 0.2).sum() / diff_2d.shape[0]
+            err_df[f'{body_type}_pck'].append(pck)
+            err_df[f'{body_type}_seq_cam'].append((seq_name, camera_idx))
 
-            pred_joints = np.concatenate([pred['joints'] for pred in preds], axis=0)  # (N, 25, 3)      
-            pred_transl = np.stack([pred['transl'][0] for pred in preds])      
-            pred_joints = np.stack([convert_op25_to_coco19(j) for j in pred_joints])
-            pred_joints = np.stack([pred_joints[np.where(np.array(body_type)==pred_body_type)[0][0]] for pred_body_type in ["adult", "infant"]]) # (2, 19, 3)
+# keep only the best camera for each sequence
 
-            image = cv2.imread(image_path)
-            for i, body_type in enumerate(["adult", "infant"]):
-                gt_keypoints_2d = gt_annotations[annotated_frame_name][i]
-                image_h, image_w, _ = image.shape
-                fov = 60
-                cam_focal_length = image_w / (2 * np.tan(fov * np.pi / 360))
-                pred_joints_2d = project_joints(pred_joints[i], cam_focal_length, (image_w/2, image_h/2))
+# gather accuracies by sequence and camera
+for body_type in ['adult', 'infant']:
+    seq_cam_id = np.array(err_df[f'{body_type}_seq_cam'])
+    seq_names = np.unique(seq_cam_id[:, 0])
+    cameras = np.unique(seq_cam_id[:, 1])
+    acc_by_camera = {}
+    metric_by_seq = defaultdict(dict)
+    for seq_name in seq_names:
+        for camera in cameras:
+            idx = np.where((seq_cam_id[:, 0] == seq_name) & (seq_cam_id[:, 1] == camera))[0]
+            if len(idx) == 0:
+                continue
+            acc_by_camera[camera] = {'pck': np.mean(np.array(err_df[f'{body_type}_pck'])[idx])}
+        # get the camera with the highest balanced accuracy
+        top_k = 31//10  # 90% percentile
+        
+        for metric in ['pck']:
+            best_camera = sorted(acc_by_camera, key=lambda x: acc_by_camera[x][metric])[-top_k:]
+            mean_metric = np.mean([acc_by_camera[cam][metric] for cam in best_camera])
+            
+            metric_by_seq[seq_name][metric] = mean_metric
 
-                if gt_keypoints_2d[9, 2] > 0 and gt_keypoints_2d[12, 2] > 0:
-                    pred_center = pred_joints_2d[[9, 12]].mean(0, keepdims=True).mean(0, keepdims=True)
-                    gt_center = gt_keypoints_2d[[9, 12], :2].mean(0, keepdims=True).mean(0, keepdims=True)
-                    pred_joints_2d = pred_joints_2d - pred_center + gt_center
-                elif gt_keypoints_2d[9, 2] > 0:
-                    pred_joints_2d = pred_joints_2d - pred_joints_2d[9] + gt_keypoints_2d[9, :2]
-                elif gt_keypoints_2d[12, 2] > 0:
-                    pred_joints_2d = pred_joints_2d - pred_joints_2d[12] + gt_keypoints_2d[12, :2]
-                else:
-                    gt_center = gt_keypoints_2d[gt_keypoints_2d[:, 2] > 0, :2].mean(0, keepdims=True).mean(0, keepdims=True)
-                    pred_center = pred_joints_2d[gt_keypoints_2d[:, 2] > 0].mean(0, keepdims=True).mean(0, keepdims=True)
-                    pred_joints_2d = pred_joints_2d - pred_center + gt_center
+    best_df = pd.DataFrame(metric_by_seq).T
+    print(best_df)
+    best_df.to_csv(f'rec_err_{body_type}.csv')
 
-                valid_gt_keypoints = gt_keypoints_2d[:, 2] > 0
-                if valid_gt_keypoints.sum() < 2:
-                    continue
-                diff_2d = np.linalg.norm(gt_keypoints_2d[valid_gt_keypoints, :2] - pred_joints_2d[valid_gt_keypoints], axis=1)
-                bbox_size = np.max(gt_keypoints_2d[valid_gt_keypoints, :2], axis=0) - np.min(gt_keypoints_2d[valid_gt_keypoints, :2], axis=0)
-                diff_2d = diff_2d / bbox_size.max()
-                pck = (diff_2d < 0.3).sum() / diff_2d.shape[0]
-                err_df[f'{body_type}_pck'].append(pck)
-                
-            err_df['view'].append(camera_idx)
+sys.exit()
+print('Overall.')
+print('adult_pck:'
+    '{}'.format(np.mean(err_df['adult_pck']) * 100))
+print('infant_pck:'
+    '{}'.format(np.mean(err_df['infant_pck']) * 100))
 
-    print('adult_pck:'
-        '{}'.format(np.mean(err_df['adult_pck']) * 100))
-    print('infant_pck:'
-        '{}'.format(np.mean(err_df['infant_pck']) * 100))
-    
-    err_df = pd.DataFrame({
-        'adult_pck': np.mean(err_df['adult_pck']) * 100,
-        'infant_pck': np.mean(err_df['infant_pck'].mean()) * 100
+for body_type in ['adult', 'infant']: 
+    err_df2 = pd.DataFrame({
+        'view': err_df[f'{body_type}_seq_cam'],
+        'pck': err_df[f'{body_type}_pck']
     })
-    err_df.to_csv(f'err_df_human_{seq_name}.csv', index=False)
+    err_df2.loc['90%'] = err_df2[["pck"]].quantile(0.9)
+    err_df2.loc['mean'] = err_df2[["pck"]].mean()
+    err_df2.to_csv(f'err_df_human_{seq_name}_{body_type}.csv', index=False)
+    print('Saved', f'err_df_human_{seq_name}_{body_type}.csv')
 
-    # sbatch evaluation/cmu_panoptic/cmu_panoptic.sh
-    # python -m evaluation.cmu_panoptic.evaluate_rec_err_human
+# sbatch evaluation/cmu_panoptic/cmu_panoptic.sh
+# python -m evaluation.cmu_panoptic.evaluate_rec_err_human
 

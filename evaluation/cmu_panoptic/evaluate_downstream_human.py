@@ -253,7 +253,7 @@ err_df = {
 }
 
 # ['no touching', 'a little bit of touching', 'a little bit of touching', 'a little bit of touching', 'no touching']
-seq_names = ['170915_toddler5', '160906_ian1', '160906_ian2', '160906_ian3', '160906_ian5']
+# seq_names = ['170915_toddler5', '160906_ian1', '160906_ian2', '160906_ian3', '160906_ian5']
 data_path = '/pasteur/data/cmu_panoptic/panoptic-toolbox/scripts'
 
 gt_annotations = parse_gt_annotations()
@@ -263,7 +263,7 @@ annotated_frames = sorted(list(annotated_frames))
 seq_cam_to_frames = defaultdict(list)
 for annotated_frame_name in annotated_frames:
     seq_name = '_'.join(annotated_frame_name.split('_')[:2])
-    camera_idx = int(annotated_frame_name.split('_')[2])
+    camera_idx = int(annotated_frame_name.split('_')[3])
     frame_idx = int(annotated_frame_name.split('_')[-1].split('.')[0])
     seq_cam_to_frames[(seq_name, camera_idx)].append(annotated_frame_name)
 
@@ -272,6 +272,7 @@ pred_visibility = []
 pred_touch = []
 gt_visibility = []
 gt_touch = []
+seq_cam_id = []  # used to filter results
 
 for (seq_name, camera_idx), annotated_frame_names in tqdm(seq_cam_to_frames.items()):
     pred_labels_path = os.path.join('/pasteur/data/cmu_panoptic/results', 'smpla_cliff', '{}_hd_00_{:02d}'.format(seq_name, camera_idx), 'labels.json')
@@ -290,6 +291,7 @@ for (seq_name, camera_idx), annotated_frame_names in tqdm(seq_cam_to_frames.item
         else:
             label = {'visibility': 4, 'touch': 2}
 
+        seq_cam_id.append((seq_name, camera_idx))
         pred_visibility.append(label['visibility'])
         pred_touch.append(label['touch'])
         gt_visibility.append(gt_annotations[annotated_frame_name][0])
@@ -302,7 +304,58 @@ gt_visibility = np.array(gt_visibility)[valid_idx]
 valid_idx = np.where(np.array(pred_touch) != 2)[0]
 pred_touch = np.array(pred_touch)[valid_idx]
 gt_touch = np.array(gt_touch)[valid_idx]
+seq_cam_id = np.array(seq_cam_id)[valid_idx]
 
+# keep only the best camera for each sequence
+seq_names = np.unique(seq_cam_id[:, 0])
+cameras = np.unique(seq_cam_id[:, 1])
+acc_by_camera = {}
+metric_by_seq = defaultdict(dict)
+# gather accuracies by sequence and camera
+for seq_name in seq_names:
+    for camera in cameras:
+        idx = np.where((seq_cam_id[:, 0] == seq_name) & (seq_cam_id[:, 1] == camera))[0]
+        if len(idx) == 0:
+            continue
+        acc_vis = accuracy_score(gt_visibility[idx], pred_visibility[idx])
+        acc_touch = accuracy_score(gt_touch[idx], pred_touch[idx])
+        balanced_acc_vis = balanced_accuracy_score(gt_visibility[idx], pred_visibility[idx])
+        balanced_acc_touch = balanced_accuracy_score(gt_touch[idx], pred_touch[idx])
+        support_visibility = Counter(gt_visibility[idx])
+        support_touch = Counter(gt_touch[idx])
+        acc_by_camera[camera] = {
+            'acc_vis': acc_vis,
+            'acc_touch': acc_touch,
+            'balanced_acc_vis': balanced_acc_vis,
+            'balanced_acc_touch': balanced_acc_touch,
+            # 'support_visibility': support_visibility,
+            # 'support_touch': support_touch,
+            # 'n_correct': np.sum((gt_visibility[idx] == pred_visibility[idx]) & (gt_touch[idx] == pred_touch[idx]))
+        }
+    # get the camera with the highest balanced accuracy
+    top_k = 31//10  # 90% percentile
+    
+    for metric in ['acc_vis', 'acc_touch', 'balanced_acc_vis', 'balanced_acc_touch']:
+        best_camera = sorted(acc_by_camera, key=lambda x: acc_by_camera[x][metric])[-top_k:]
+        mean_metric = np.mean([acc_by_camera[cam][metric] for cam in best_camera])
+        
+        metric_by_seq[seq_name][metric] = mean_metric
+
+print("Best results by sequence")
+results = pd.DataFrame(metric_by_seq).T
+# append a mean row
+results.loc['mean'] = results.mean()
+print(results)
+
+#                   acc_vis  acc_touch  balanced_acc_vis  balanced_acc_touch
+# 160401_ian1      0.321429   0.142857          0.357143            0.142857
+# 160401_ian2      0.964286   1.000000          0.964286            1.000000
+# 160401_ian3      1.000000   1.000000          1.000000            1.000000
+# 170915_toddler3  1.000000   1.000000          1.000000            1.000000
+# 170915_toddler4  1.000000   1.000000          1.000000            1.000000
+# mean             0.857143   0.828571          0.864286            0.828571
+
+print("Results on all frames")
 # calculate accuracy and balanced accuracy
 acc_vis = accuracy_score(gt_visibility, pred_visibility)
 acc_touch = accuracy_score(gt_touch, pred_touch)

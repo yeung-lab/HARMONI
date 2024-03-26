@@ -170,6 +170,7 @@ def visualize_skel(pred_joints, gt_joints):
 
 seq_names = ['170915_toddler5', '160906_ian1', '160906_ian2', '160906_ian3', '160906_ian5']
 data_path = '/pasteur/data/cmu_panoptic/panoptic-toolbox/scripts'
+downsample_factor = 30
 for seq_name in seq_names:
         
     annotations = glob(os.path.join(data_path, seq_name, 'hdPose3d_stage1_coco19', 'body3DScene_*.json'))
@@ -199,6 +200,10 @@ for seq_name in seq_names:
 
     for camera_idx in range(31):
         cam = cameras[(0, camera_idx)]
+        pck_for_view = {
+            'adult_pck': [],
+            'infant_pck': []
+        }
 
         err_acc = ErrAccumulator()
         pred_results_path = os.path.join('/pasteur/data/cmu_panoptic/results', 'cmu_panoptic_smpla', '{}_hd_00_{:02d}'.format(seq_name, camera_idx), 'results.pt')
@@ -213,7 +218,7 @@ for seq_name in seq_names:
         for pid, res in pred_results.results.items():
             image_name_to_results[res['img_name']].append(res)
 
-        for annotation in tqdm(sorted(annotations), total=len(annotations), desc='evaluating'):
+        for annotation in tqdm(sorted(annotations)[::downsample_factor], total=len(annotations[::downsample_factor]), desc='evaluating'):
             frame_idx = int(annotation.split('/')[-1].split('.')[0].split('_')[-1])
             preds = image_name_to_results['frame_{0:08d}.jpg'.format(frame_idx)]
             image_path = os.path.join(data_path, seq_name, 'hdImgs', '00_{:02d}'.format(camera_idx), '00_{:02d}_{:08d}.jpg'.format(camera_idx, frame_idx))
@@ -257,6 +262,10 @@ for seq_name in seq_names:
                 # for i in range(child_keypoints_2d.shape[1]):
                 #     cv2.circle(image, (int(child_keypoints_2d[0, i]), int(child_keypoints_2d[1, i])), 5, (0, 0, 255), -1)
                 # overlay pred_joints
+                if image is None:
+                    print('skipping frame {} bc no image'.format(frame_idx))
+                    pck_for_view[f'{body_type}_pck'].append(np.nan)
+                    continue
                 image_h, image_w, _ = image.shape
                 fov = 60
                 cam_focal_length = image_w / (2 * np.tan(fov * np.pi / 360))
@@ -275,7 +284,7 @@ for seq_name in seq_names:
                 # shift the infant because of the hardcoded scaling in smpl_utils.py
                 
                 pck = (diff_2d < 0.3).sum() / diff_2d.shape[0]
-                err_df[f'{body_type}_pck'].append(pck)
+                pck_for_view[f'{body_type}_pck'].append(pck)
 
             pred_center = pred_joints[:, 2:3, :3].mean(0, keepdims=True)
             gt_center = gt_joints[:, 2:3, :3].mean(0, keepdims=True)
@@ -315,19 +324,20 @@ for seq_name in seq_names:
         print('joint_mpjpe:'
             '{}'.format(err_acc.get_mean_for_joint() * 1000))
         print('adult_pck:'
-            '{}'.format(np.mean(err_df['adult_pck']) * 100))
+            '{}'.format(np.mean(pck_for_view['adult_pck']) * 100))
         print('infant_pck:'
-            '{}'.format(np.mean(err_df['infant_pck']) * 100))
+            '{}'.format(np.mean(pck_for_view['infant_pck']) * 100))
         
         err_df['view'].append(camera_idx)
         err_df['adult_mpjpe'].append(err_acc.get_mean_for_adult() * 1000)
         err_df['infant_mpjpe'].append(err_acc.get_mean_for_infant() * 1000)
         err_df['joint_mpjpe'].append(err_acc.get_mean_for_joint() * 1000)
-        err_df['adult_pck'].append(np.mean(err_df['adult_pck']))
-        err_df['infant_pck'].append(np.mean(err_df['infant_pck']))
+        err_df['adult_pck'].append(np.mean(pck_for_view['adult_pck']))
+        err_df['infant_pck'].append(np.mean(pck_for_view['infant_pck']))
 
     err_df = pd.DataFrame(err_df)
-
+    metrics = err_df.iloc[:, 1:]
+    err_df.loc['90%'] = metrics.quantile(0.9)
     print(seq_name)
     print(err_df)
     err_df.to_csv(f'err_df_{seq_name}.csv', index=False)
