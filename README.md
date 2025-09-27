@@ -29,8 +29,31 @@ conda activate process_audio
 Installation for either visual or audio model should be around 5 to 10 minutes.
 
 2. Download data folder that includes model checkpoints and other dependencies [here](https://drive.google.com/drive/u/2/folders/1vMZl8CTf1-LUv6x1J_yHpYWU-IhPLQQL).
+Note (Sept26,2025): Due to licensing requirements we cannot provide SMPL models. Please download from their websites instead.
+For reference, the folder structure looks like this
+```
+(base) zweng@Mac data % ls -R body_models
+gmm_08.pkl		smil_packed_info.pth	smpl_mean_params.npz
+smil			smpl			smplx
 
-3. We provide the example output from public video clips. You could download them [here](https://drive.google.com/drive/u/2/folders/13B6j3Px0nfxt_CCMqGksEAGm4f_dRHGo).
+body_models/smil:
+readme.txt		SMPL_FEMALE.pkl		SMPL_MALE.pkl		SMPL_NEUTRAL.pkl
+
+body_models/smpl:
+__init__.py		SMPL_FEMALE.pkl		SMPL_MALE.pkl		SMPL_NEUTRAL.pkl	smpl_webuser
+
+body_models/smpl/smpl_webuser:
+__init__.py		lbs.py			posemapper.py		serialization.py
+hello_world		LICENSE.txt		README.txt		verts.py
+
+body_models/smpl/smpl_webuser/hello_world:
+hello_smpl.py	render_smpl.py
+
+body_models/smplx:
+SMPL_NEUTRAL.pkl	version.txt
+```
+
+4. We provide the example output from public video clips. You could download them [here](https://drive.google.com/drive/u/2/folders/13B6j3Px0nfxt_CCMqGksEAGm4f_dRHGo).
 
 Visualization of the example clip.
 <p float="center">
