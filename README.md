@@ -52,6 +52,7 @@ hello_smpl.py	render_smpl.py
 body_models/smplx:
 SMPL_NEUTRAL.pkl	version.txt
 ```
+Note: to generate the `SMPLA_{gender}.pth` files follow the instructions [here](https://github.com/Arthur151/ROMP/blob/a8558aed480af850756f84e2a7c787e359bddbd0/docs/installation.md#3-preparing-smpl-model-files).
 
 4. We provide the example output from public video clips. You could download them [here](https://drive.google.com/drive/u/2/folders/13B6j3Px0nfxt_CCMqGksEAGm4f_dRHGo).
 
