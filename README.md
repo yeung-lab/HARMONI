@@ -29,7 +29,7 @@ conda activate process_audio
 Installation for either visual or audio model should be around 5 to 10 minutes.
 
 2. Download data folder that includes model checkpoints and other dependencies [here](https://drive.google.com/drive/u/2/folders/1vMZl8CTf1-LUv6x1J_yHpYWU-IhPLQQL).
-Note (Sept26,2025): Due to licensing requirements we cannot provide SMPL models. Please download from their websites instead.
+Note (Sept26,2025): Due to licensing requirements we cannot provide SMPL models. Please download from their websites instead [SMIL](https://www.iosb.fraunhofer.de/en/competences/image-exploitation/object-recognition/sensor-networks/motion-analysis.html), [SMPL/SMPLX](https://www.google.com/search?client=safari&rls=en&q=smpl+body+model&ie=UTF-8&oe=UTF-8).
 For reference, the folder structure looks like this
 ```
 (base) zweng@Mac data % ls -R body_models
@@ -62,7 +62,7 @@ Visualization of the example clip.
 </p>
 Please see below for instructions for reproducing the visual results.
 
-## Running HARMONI visual mdoel on a demo video
+## Running HARMONI visual model on a demo video
 Here we show how to run HARMONI on a public video [clip](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzl4ZG10d3lhbGMxc2E1OTVrdHU1emo0YXYwcGtsbDV1NG5uaDdqdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5pK2Rs57ZCACAh8Fxs/giphy.gif). A basic command would be
 ```bash
 python main.py --config data/cfgs/harmoni.yaml --video data/demo/giphy.gif --out_folder ./results/giphy --keep contains_only_both --save_gif
