@@ -86,7 +86,7 @@ class SMPL(nn.Module):
     def __init__(self, model_path, model_type='smpl', dtype=torch.float32):
         super(SMPL, self).__init__()
         self.dtype = dtype
-        model_info = torch.load(model_path)
+        model_info = torch.load(model_path, map_location='cpu')
 
         self.faces = model_info['f']
 

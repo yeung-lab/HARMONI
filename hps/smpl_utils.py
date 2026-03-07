@@ -11,9 +11,10 @@ from hps.body_model import init_body_model
 from hps.smpla import prepare_smpla_model
 
 crop_size = 224  # crop size used in DAPA
-infant_bm = init_body_model(model_path=cfg.smil_model_path, batch_size=1, create_body_pose=False).cuda()
-adult_bm = init_body_model(model_path=cfg.smpl_model_path, batch_size=1, create_body_pose=False).cuda()
-smpla_bm = prepare_smpla_model(dtype=torch.float32, gender='neutral').cuda()
+_device = cfg.DEVICE
+infant_bm = init_body_model(model_path=cfg.smil_model_path, batch_size=1, create_body_pose=False).to(_device)
+adult_bm = init_body_model(model_path=cfg.smpl_model_path, batch_size=1, create_body_pose=False).to(_device)
+smpla_bm = prepare_smpla_model(dtype=torch.float32, gender='neutral').to(_device)
 
 
 def get_original(cam, x, y, h, target_focal, orig_img_width, orig_img_height):

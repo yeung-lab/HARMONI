@@ -62,7 +62,7 @@ EXTRA:
 
 experiment_name: demo
 track_dataset: demo
-device: "cuda"
+device: "auto"
 train: False
 debug: False
 use_gt: False

@@ -52,7 +52,7 @@ def BoxRelationalEmbedding(f_g, dim_g=64, wave_len=1000, trignometric_embedding=
     position_mat = torch.cat((delta_x, delta_y, delta_w, delta_h), -1)
 
     if trignometric_embedding == True:
-        feat_range = torch.arange(dim_g / 8).cuda()
+        feat_range = torch.arange(dim_g / 8, device=position_mat.device)
         dim_mat = feat_range / (dim_g / 8)
         dim_mat = 1. / (torch.pow(wave_len, dim_mat))
 
@@ -114,7 +114,7 @@ def BoxTimeRelationalEmbedding(f_g, dim_g=80, wave_len=1000, trignometric_embedd
     position_mat = torch.cat((delta_x, delta_y, delta_w, delta_h, delta_t), -1)
 
     if trignometric_embedding == True:
-        feat_range = torch.arange(dim_g / 10).cuda()
+        feat_range = torch.arange(dim_g / 10, device=position_mat.device)
         dim_mat = feat_range / (dim_g / 10)
         dim_mat = 1. / (torch.pow(wave_len, dim_mat))
 
@@ -179,7 +179,7 @@ def BoxTimeIdRelationalEmbedding(f_g, dim_g=96, wave_len=1000, trignometric_embe
     position_mat = torch.cat((delta_x, delta_y, delta_w, delta_h, delta_id, delta_t), -1)
 
     if trignometric_embedding == True:
-        feat_range = torch.arange(dim_g / 12).cuda()
+        feat_range = torch.arange(dim_g / 12, device=position_mat.device)
         dim_mat = feat_range / (dim_g / 12)
         dim_mat = 1. / (torch.pow(wave_len, dim_mat))
 

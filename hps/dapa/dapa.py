@@ -185,7 +185,7 @@ def hmr(smpl_mean_params, pretrained=True, **kwargs):
 
 def get_dapa_model(checkpoint_path, smpl_mean_params):
     model = hmr(smpl_mean_params)
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
     logger.info('Loaded DAPA model from {}'.format(checkpoint_path))
 
     model.load_state_dict(checkpoint['model'], strict=False)

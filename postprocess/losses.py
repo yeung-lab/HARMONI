@@ -35,7 +35,7 @@ def perspective_projection(points, rotation, translation,
         camera_center (bs, 2): Camera center
     """
     batch_size = points.shape[0]
-    K = torch.zeros([batch_size, 3, 3], device=points.device)
+    K = torch.zeros([batch_size, 3, 3], device=points.device, dtype=points.dtype)
     K[:,0,0] = focal_length
     K[:,1,1] = focal_length
     K[:,2,2] = 1.
@@ -68,8 +68,8 @@ def body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_center,
     # sigma = 10.
 
     batch_size = body_pose.shape[0]
-    rotation = torch.eye(3, device=body_pose.device).unsqueeze(0).expand(batch_size, -1, -1)
-    projected_joints = perspective_projection(model_joints, rotation, camera_t,
+    rotation = torch.eye(3, device=body_pose.device, dtype=model_joints.dtype).unsqueeze(0).expand(batch_size, -1, -1)
+    projected_joints = perspective_projection(model_joints, rotation, camera_t.to(model_joints.dtype),
                                               focal_length, camera_center)
 
     # Weighted robust reprojection error
@@ -105,8 +105,8 @@ def camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_center, joi
 
     # Project model joints
     batch_size = model_joints.shape[0]
-    rotation = torch.eye(3, device=model_joints.device).unsqueeze(0).expand(batch_size, -1, -1)
-    projected_joints = perspective_projection(model_joints, rotation, camera_t,
+    rotation = torch.eye(3, device=model_joints.device, dtype=model_joints.dtype).unsqueeze(0).expand(batch_size, -1, -1)
+    projected_joints = perspective_projection(model_joints, rotation, camera_t.to(model_joints.dtype),
                                               focal_length, camera_center)
 
     op_joints = ['OP RHip', 'OP LHip', 'OP RShoulder', 'OP LShoulder']
@@ -144,6 +144,8 @@ def loss_ground_plane(anchor, normal, point1, point2):
     # take de predicted 3d joints and measure dist to plane w normal
 
     # dot product w normal
+    normal = normal.to(point1.dtype)
+    anchor = anchor.to(point1.dtype)
     point_to_anchor = (anchor - point1) / torch.norm(anchor - point1, 2, -1, keepdim=True)
     point1_cos_theta = torch.matmul(point_to_anchor, normal[:, None]).sum(1)
     point1_gp_loss = torch.abs(point1_cos_theta)  # cos_theta is 0 if two vectors are perpendicular
@@ -179,8 +181,8 @@ def temporal_body_fitting_loss(body_pose, betas, model_joints, camera_t, camera_
     # sigma = 10.
 
     batch_size = body_pose.shape[0]
-    rotation = torch.eye(3, device=body_pose.device).unsqueeze(0).expand(batch_size, -1, -1)
-    projected_joints = perspective_projection(model_joints, rotation, camera_t,
+    rotation = torch.eye(3, device=body_pose.device, dtype=model_joints.dtype).unsqueeze(0).expand(batch_size, -1, -1)
+    projected_joints = perspective_projection(model_joints, rotation, camera_t.to(model_joints.dtype),
                                               focal_length, camera_center)
 
     # Weighted robust reprojection error
@@ -271,8 +273,8 @@ def temporal_camera_fitting_loss(model_joints, camera_t, camera_t_est, camera_ce
 
     # Project model joints
     batch_size = model_joints.shape[0]
-    rotation = torch.eye(3, device=model_joints.device).unsqueeze(0).expand(batch_size, -1, -1)
-    projected_joints = perspective_projection(model_joints, rotation, camera_t,
+    rotation = torch.eye(3, device=model_joints.device, dtype=model_joints.dtype).unsqueeze(0).expand(batch_size, -1, -1)
+    projected_joints = perspective_projection(model_joints, rotation, camera_t.to(model_joints.dtype),
                                               focal_length, camera_center)
 
     op_joints = ['OP RHip', 'OP LHip', 'OP RShoulder', 'OP LShoulder']

@@ -27,7 +27,9 @@ def load_semi_sup_classifier(model_path):
 
 
 class BodyTypeClassifier():
-    def __init__(self, model_path, device='cuda') -> None:
+    def __init__(self, model_path, device=None) -> None:
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.classifier, self.label_dict = load_semi_sup_classifier(model_path)
         self.device = device
         self.classifier.to(self.device)

@@ -493,7 +493,7 @@ class HighResolutionNet(nn.Module):
     def init_weights(self, pretrained='', ):
         logger.info('=> pretrained: ' + pretrained)
         if os.path.isfile(pretrained):
-            pretrained_dict = torch.load(pretrained)
+            pretrained_dict = torch.load(pretrained, map_location='cpu')
             # logger.info('=> loading pretrained model {}'.format(pretrained))
             # model_dict = self.state_dict()
             # pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict.keys()}

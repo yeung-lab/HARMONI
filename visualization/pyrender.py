@@ -21,7 +21,7 @@ from downstream.calc_downstream import pose_str_map, touch_str_map, visibility_s
 
 colors = get_colors()
 
-def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device='cuda', save_mesh=False,
+def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, skip_if_no_infant=False, device=None, save_mesh=False,
            camera_center=np.array([960, 540]), img_list=None, fast_render=True, use_smoothed=False,
            add_ground_plane=False, anchor=None, ground_normal=None, top_view=False,
            keep_criterion='all', renderer='pyrender', smpl_type='smpl_smil', kid_age=1.0):
@@ -30,6 +30,8 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
     anchor: a point on the ground plane
     ground_normal: the normal of the ground plane
     """
+    if device is None:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
     adult_bm = init_body_model(cfg.smpl_model_path, batch_size=1, create_body_pose=True).to(device)
     infant_bm = init_body_model(cfg.smil_model_path, batch_size=1, create_body_pose=True).to(device)
     smpla_bm = prepare_smpla_model(torch.float32, 'neutral').to(device)
@@ -91,8 +93,8 @@ def render(dataset, results, labels, img_path, save_folder, cfg, cam_params, ski
                 result = results.results[person_id]
             is_ghost = dataset[person_id]['is_ghost']
             kp_2d = result['keypoints'][0,:25]
-            pose, betas = to_tensor(result['body_pose']), to_tensor(result['betas'])
-            global_orient = to_tensor(result['global_orient'])
+            pose, betas = to_tensor(result['body_pose']).float(), to_tensor(result['betas']).float()
+            global_orient = to_tensor(result['global_orient']).float()
             faces.append(smpl_faces)
 
             if smpl_type == 'smpl_smil':
@@ -355,10 +357,11 @@ def render_with_pyrender(
     elif renderer == 'sim3drender':
         from vis_human.sim3drender import Sim3DR
         renderer = Sim3DR()
-        cam_preds = torch.tensor(camera_translations).float().cuda()
-        vertices = torch.tensor(vertices).float().cuda()
-        
-        verts, K = perspective_projection(vertices, cam_preds, focal_length=focal_length[0], camera_center=torch.tensor(camera_center).cuda())
+        _device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        cam_preds = torch.tensor(camera_translations).float().to(_device)
+        vertices = torch.tensor(vertices).float().to(_device)
+
+        verts, K = perspective_projection(vertices, cam_preds, focal_length=focal_length[0], camera_center=torch.tensor(camera_center).to(_device))
         verts = torch.cat([verts, vertices[:,:,[2]]], -1)
         verts[:, :, 2] *= -1
         mesh_colors = np.array([colors[mesh_colors[idx]] for idx in range(num_persons)]) / 255.

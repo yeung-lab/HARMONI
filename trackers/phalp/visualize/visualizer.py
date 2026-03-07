@@ -29,7 +29,7 @@ class Visualizer(nn.Module):
         
         self.cfg = cfg
         self.hmar = hmar
-        self.device = 'cuda'
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         texture_file = np.load(self.cfg.SMPL.TEXTURE)
         self.faces_cpu = texture_file['smpl_faces'].astype('uint32')
 
@@ -37,6 +37,10 @@ class Visualizer(nn.Module):
         self.render_size = 256
 
     def reset_render(self, image_size):
+        if self.render_size == image_size:
+            return
+        if hasattr(self, 'render') and hasattr(self.render, 'renderer'):
+            self.render.renderer.delete()
         self.render = Renderer(focal_length=self.cfg.EXTRA.FOCAL_LENGTH, img_res=image_size, faces=self.faces_cpu)
         self.render_size = image_size
         
@@ -48,7 +52,7 @@ class Visualizer(nn.Module):
         focal_length = self.cfg.EXTRA.FOCAL_LENGTH * torch.ones(batch_size, 2, device=self.device)
         
         pred_smpl_params = default_collate(pred_smpl_params)
-        smpl_output = self.hmar.smpl(**{k: v.float().cuda() for k,v in pred_smpl_params.items()}, pose2rot=False)
+        smpl_output = self.hmar.smpl(**{k: v.float().to(self.device) for k,v in pred_smpl_params.items()}, pose2rot=False)
         pred_vertices = smpl_output.vertices
         pred_joints = smpl_output.joints
         
@@ -56,11 +60,11 @@ class Visualizer(nn.Module):
         pred_cam_t_bs = pred_cam_t.unsqueeze(1).repeat(1, pred_vertices.size(1), 1)
         verts = pred_vertices + pred_cam_t_bs
 
-        pred_joints = torch.cat((pred_joints, torch.zeros(batch_size, 1, 3).cuda()), 1)
-        pred_keypoints_2d_smpl = perspective_projection(pred_joints, rotation=torch.eye(3,).unsqueeze(0).expand(batch_size, -1, -1).cuda(),
-                                                        translation=pred_cam_t.cuda(),
+        pred_joints = torch.cat((pred_joints, torch.zeros(batch_size, 1, 3, device=self.device)), 1)
+        pred_keypoints_2d_smpl = perspective_projection(pred_joints, rotation=torch.eye(3,).unsqueeze(0).expand(batch_size, -1, -1).to(self.device),
+                                                        translation=pred_cam_t.to(self.device),
                                                         focal_length=focal_length / img_size,
-                                                        camera_center=torch.zeros(batch_size, 2).cuda())  
+                                                        camera_center=torch.zeros(batch_size, 2, device=self.device))  
 
         pred_keypoints_2d_smpl = (pred_keypoints_2d_smpl+0.5)*img_size
 

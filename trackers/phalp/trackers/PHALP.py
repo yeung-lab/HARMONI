@@ -40,7 +40,10 @@ class PHALP(nn.Module):
         super(PHALP, self).__init__()
 
         self.cfg = cfg
-        self.device = torch.device(self.cfg.device)
+        if self.cfg.device == "auto":
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = torch.device(self.cfg.device)
         
         # download wights and configs from Google Drive
         self.cached_download_from_drive()
@@ -64,7 +67,7 @@ class PHALP(nn.Module):
     def setup_hmr(self):
         log.info("Loading HMR model...")
         self.HMAR       = HMAR(self.cfg)
-        checkpoint_file = torch.load('_DATA/hmar_v2_weights.pth')
+        checkpoint_file = torch.load('_DATA/hmar_v2_weights.pth', map_location=self.device)
         state_dict_filt = {}
         for k, v in checkpoint_file['model'].items():
             if ("encoding_head" in k or "texture_head" in k or "backbone" in k or "smplx_head" in k): 
@@ -370,7 +373,7 @@ class PHALP(nn.Module):
         ratio               = 1.0/int(new_image_size)*self.cfg.render.res
 
         with torch.no_grad():
-            hmar_out        = self.HMAR(masked_image.unsqueeze(0).cuda()) 
+            hmar_out        = self.HMAR(masked_image.unsqueeze(0).to(self.device))
 
             uv_image        = hmar_out['uv_image'][:, :3, :, :]/5.0
             uv_mask         = hmar_out['uv_image'][:, 3:, :, :]
@@ -448,9 +451,9 @@ class PHALP(nn.Module):
             history              = en_pose.size(1)
             attn                 = torch.ones(BS, history, history)
 
-            xf_trans             = self.HMAR.pose_transformer.relational(en_pose[:, :, 2048:].float().cuda(), en_data.float().cuda(), attn.float().cuda())  #bs, 13, 2048
+            xf_trans             = self.HMAR.pose_transformer.relational(en_pose[:, :, 2048:].float().to(self.device), en_data.float().to(self.device), attn.float().to(self.device))  #bs, 13, 2048
             xf_trans             = xf_trans.view(-1, 2048)
-            movie_strip_t        = self.HMAR.pose_transformer.smpl_head_prediction(en_pose[:, :, 2048:].float().view(-1, 2048).cuda(), xf_trans)  #bs*13, 2048 -> bs*13, 12, 2048
+            movie_strip_t        = self.HMAR.pose_transformer.smpl_head_prediction(en_pose[:, :, 2048:].float().view(-1, 2048).to(self.device), xf_trans)  #bs*13, 2048 -> bs*13, 12, 2048
             movie_strip_t        = movie_strip_t.view(BS, history, 12, 2048)
             xf_trans             = xf_trans.view(BS, history, 2048)
 
@@ -539,8 +542,8 @@ class PHALP(nn.Module):
         return xt
 
     def get_uv_distance(self, t_uv, d_uv):
-        t_uv         = torch.from_numpy(t_uv).cuda().float()
-        d_uv         = torch.from_numpy(d_uv).cuda().float()
+        t_uv         = torch.from_numpy(t_uv).to(self.device).float()
+        d_uv         = torch.from_numpy(d_uv).to(self.device).float()
         d_mask       = d_uv[3:, :, :]>0.5
         t_mask       = t_uv[3:, :, :]>0.5
         

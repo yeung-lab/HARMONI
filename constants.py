@@ -1,3 +1,7 @@
+import torch
+
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 openpose_ckpts_path = 'data/ckpts'
 body_type_classifier_path = 'data/ckpts/body_type_classifier_res101.pth.tar'
 

@@ -33,12 +33,14 @@ class TemporalSMPLify():
                  num_iters=100,
                  focal_length=5000,
                  use_lbfgs=True,
-                 device=torch.device('cuda'),
+                 device=None,
                  max_iter=20,  # for LBFGS
                  ground_weight=100
                  ):
 
         # Store options
+        if device is None:
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = device
         self.focal_length = focal_length
         self.step_size = step_size

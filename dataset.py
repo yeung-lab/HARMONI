@@ -64,6 +64,8 @@ class Dataset(data.Dataset):
                     num_persons += 1
                     
             body_type_classifier = BodyTypeClassifier(cfg.body_type_classifier_path)
+            self.person_to_img = person_to_img
+            self.person_to_det = person_to_det
             track_to_id, id_to_track, track_id_to_detections = self.run_tracking(person_to_det, tracker_type=tracker_type)
             track_body_types = body_type_classifier(track_id_to_detections, self.img_folder, out_folder, classifier=None)
 

@@ -59,11 +59,11 @@ class HMAR(nn.Module):
         
         self.smpl_head            = SMPLHead(cfg)
         self.smpl_head.pool       = 'pooled'
-        self.device               = "cuda"
+        self.device               = "cuda" if torch.cuda.is_available() else "cpu"
         
         if("P" in self.cfg.phalp.predict):
             self.pose_transformer     = Pose_transformer(self.cfg)
-            checkpoint_file = torch.load("_DATA/hmmr_v2_weights.pt")
+            checkpoint_file = torch.load("_DATA/hmmr_v2_weights.pt", map_location=self.device)
                 
             state_dict_filt = {k[11:]: v for k, v in checkpoint_file['model'].items() if ("relational" in k)}  
             self.pose_transformer.relational.load_state_dict(state_dict_filt, strict=True)
@@ -134,14 +134,14 @@ class HMAR(nn.Module):
 
         mask_model = []
         loc_       = 0
-        zeros_  = torch.zeros(batch_size, 1, 3).cuda()
+        zeros_  = torch.zeros(batch_size, 1, 3, device=pred_joints.device)
         pred_joints = torch.cat((pred_joints, zeros_), 1)
 
-        camera_center          = torch.zeros(batch_size, 2)
-        pred_keypoints_2d_smpl = perspective_projection(pred_joints, rotation=torch.eye(3,).unsqueeze(0).expand(batch_size, -1, -1).cuda(),
-                                                        translation=pred_cam_t.cuda(),
+        camera_center          = torch.zeros(batch_size, 2, device=pred_joints.device)
+        pred_keypoints_2d_smpl = perspective_projection(pred_joints, rotation=torch.eye(3,).unsqueeze(0).expand(batch_size, -1, -1).to(pred_joints.device),
+                                                        translation=pred_cam_t.to(pred_joints.device),
                                                         focal_length=focal_length / img_size,
-                                                        camera_center=camera_center.cuda())  
+                                                        camera_center=camera_center)  
 
         pred_keypoints_2d_smpl = (pred_keypoints_2d_smpl+0.5)*img_size
 

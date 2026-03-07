@@ -1,5 +1,14 @@
+data
 data/
+_DATA
+_DATA/
+ckpts
+ckpts/
+Dockerfile
+.dockerignore
+install.md
 results/
+.claude/
 .DS_Store
 ._.DS_Store
 

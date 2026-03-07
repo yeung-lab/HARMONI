@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
 from loguru import logger
-from torchgeometry import rotation_matrix_to_angle_axis
+from kornia.geometry.conversions import rotation_matrix_to_angle_axis
 
 from cmd_parser import parse_config
 import constants as cfg
@@ -50,7 +50,7 @@ def main(args):
         yaml.dump(vars(args), f)
 
     batch_size = args.batch_size
-    device = 'cuda'
+    device = cfg.DEVICE
     
     # build dataset and save it to disk.
     dataset_path = os.path.join(out_folder, 'dataset.pt')
@@ -97,7 +97,7 @@ def main(args):
             num_iters=args.smplify_iters,
             focal_length=cam_focal_length,
             use_lbfgs=False,
-            device=torch.device('cuda'),
+            device=cfg.DEVICE,
             max_iter=20, 
             ground_weight=args.ground_weight
         )
@@ -113,15 +113,15 @@ def main(args):
     if not args.render_only:
         # load pretrained DAPA model
         if args.hps == 'dapa':
-            adult_model = hps.get_dapa_model(cfg.dapa_adult_model, cfg.smpl_mean_params).cuda().eval()
-            infant_model = hps.get_dapa_model(cfg.dapa_child_model, cfg.smpl_mean_params).cuda().eval()
+            adult_model = hps.get_dapa_model(cfg.dapa_adult_model, cfg.smpl_mean_params).to(device).eval()
+            infant_model = hps.get_dapa_model(cfg.dapa_child_model, cfg.smpl_mean_params).to(device).eval()
             
         elif args.hps == 'cliff':
             from hps.cliff import cliff_hr48, strip_prefix_if_present
-            cliff_model = cliff_hr48(cfg.smpl_mean_params).cuda()
+            cliff_model = cliff_hr48(cfg.smpl_mean_params).to(device)
             # Load the pretrained model
             logger.info("Load the CLIFF checkpoint from path:", cfg.cliff_hr48_model)
-            state_dict = torch.load(cfg.cliff_hr48_model)['model']
+            state_dict = torch.load(cfg.cliff_hr48_model, map_location=device)['model']
             state_dict = strip_prefix_if_present(state_dict, prefix="module.")
             cliff_model.load_state_dict(state_dict, strict=True)
             cliff_model.eval()
@@ -231,11 +231,7 @@ def main(args):
                     raise NotImplementedError('Unknown hps model: ' + args.hps)
                 
                 init_betas = pred_betas
-                pred_rotmat_hom = torch.cat(
-                    [pred_rotmat.view(-1, 3, 3),
-                    torch.tensor([0, 0, 1], dtype=torch.float32, device=device).view(1, 3, 1).expand(cur_batch_size*24, -1, -1)
-                    ], dim=-1)
-                pred_pose = rotation_matrix_to_angle_axis(pred_rotmat_hom).contiguous().view(cur_batch_size, -1)
+                pred_pose = rotation_matrix_to_angle_axis(pred_rotmat.view(-1, 3, 3)).contiguous().view(cur_batch_size, -1)
                 pred_pose[torch.isnan(pred_pose)] = 0.0
                 init_global_orient = pred_pose[:,:3]
                 init_pose = pred_pose[:, 3:]

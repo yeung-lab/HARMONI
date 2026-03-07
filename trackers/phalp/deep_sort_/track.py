@@ -7,7 +7,7 @@ from collections import deque, defaultdict
 
 import numpy as np
 import scipy.signal as signal
-from scipy.ndimage.filters import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d
 
 
 class TrackState:
