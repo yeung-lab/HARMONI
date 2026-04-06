@@ -37,11 +37,13 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and version pinni
 ### Option B: Docker
 See [Docker](#docker) section below.
 
-2. Download data folder that includes model checkpoints and other dependencies [here](https://drive.google.com/drive/u/2/folders/1vMZl8CTf1-LUv6x1J_yHpYWU-IhPLQQL).
+## Download data and checkpoints
+
+1. Download data folder that includes model checkpoints and other dependencies [here](https://drive.google.com/drive/u/2/folders/1vMZl8CTf1-LUv6x1J_yHpYWU-IhPLQQL).
 Note (Sept26,2025): Due to licensing requirements we cannot provide SMPL models. Please download from their websites instead [SMIL](https://www.iosb.fraunhofer.de/en/competences/image-exploitation/object-recognition/sensor-networks/motion-analysis.html), [SMPL/SMPLX](https://www.google.com/search?client=safari&rls=en&q=smpl+body+model&ie=UTF-8&oe=UTF-8).
 Note: to generate the `SMPLA_{gender}.pth` files follow the instructions [here](https://github.com/Arthur151/ROMP/blob/a8558aed480af850756f84e2a7c787e359bddbd0/docs/installation.md#3-preparing-smpl-model-files).
 
-The expected `data/` folder structure:
+2. The expected `data/` folder structure:
 ```
 data/
 ├── arial.ttf
@@ -80,7 +82,7 @@ data/
     └── texture.npz
 ```
 
-4. We provide the example output from public video clips. You could download them [here](https://drive.google.com/drive/u/2/folders/13B6j3Px0nfxt_CCMqGksEAGm4f_dRHGo).
+3. We provide the example output from public video clips. You could download them [here](https://drive.google.com/drive/u/2/folders/13B6j3Px0nfxt_CCMqGksEAGm4f_dRHGo).
 
 Visualization of the example clip.
 <p float="center">
