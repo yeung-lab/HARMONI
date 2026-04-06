@@ -35,7 +35,46 @@ Installation for either visual or audio model should be around 5 to 10 minutes.
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and version pinning notes.
 
 ### Option B: Docker
-See [Docker](#docker) section below.
+The Docker image contains two separate Python environments: a visual venv (Python 3.10) and an audio venv (Python 3.7). The `data/` folder is mounted at runtime to avoid bloating the image. The code auto-detects GPU/CPU, so the same image works on both GPU and CPU-only machines (CPU will be significantly slower).
+
+### Pull the image
+```bash
+docker pull lmbravo/harmoni:latest
+docker tag lmbravo/harmoni:latest harmoni
+```
+
+### Run — Visual model
+With GPU (`--gpus all` requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):
+```bash
+docker run --gpus all --user $(id -u):$(id -g) -e HOME=/tmp \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/results:/app/results \
+  harmoni python main.py --config data/cfgs/harmoni.yaml \
+    --video data/demo/giphy.gif \
+    --out_folder /app/results/giphy \
+    --keep all --save_gif
+```
+
+Without GPU (omit `--gpus all`):
+```bash
+docker run --user $(id -u):$(id -g) -e HOME=/tmp \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/results:/app/results \
+  harmoni python main.py --config data/cfgs/harmoni.yaml \
+    --video data/demo/giphy.gif \
+    --out_folder /app/results/giphy \
+    --keep all --save_gif
+```
+
+### Run — Audio model
+Use `/opt/venv_audio/bin/python` to run the audio pipeline (Python 3.7):
+```bash
+docker run --gpus all --user $(id -u):$(id -g) -e HOME=/tmp \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/results:/app/results \
+  harmoni /opt/venv_audio/bin/python audio/run.py \
+    data/demo/seedlings.mp4 /app/results/seedlings/
+```
 
 ## Download data and checkpoints
 
@@ -126,72 +165,6 @@ Here, we show the result on a publicly available demo [video](https://bergelsonl
 ```
 cd audio
 python run.py ../data/demo/seedlings.mp4 ../results/seedlings/
-```
-
-## Docker
-The Docker image contains two separate Python environments: a visual venv (Python 3.10) and an audio venv (Python 3.7). The `data/` folder is mounted at runtime to avoid bloating the image. The code auto-detects GPU/CPU, so the same image works on both GPU and CPU-only machines (CPU will be significantly slower).
-
-### Pull the image
-```bash
-docker pull lmbravo/harmoni:latest
-docker tag lmbravo/harmoni:latest harmoni
-```
-
-### Run — Visual model
-With GPU (`--gpus all` requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):
-```bash
-docker run --gpus all --user $(id -u):$(id -g) -e HOME=/tmp \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/results:/app/results \
-  harmoni python main.py --config data/cfgs/harmoni.yaml \
-    --video data/demo/giphy.gif \
-    --out_folder /app/results/giphy \
-    --keep all --save_gif
-```
-
-Without GPU (omit `--gpus all`):
-```bash
-docker run --user $(id -u):$(id -g) -e HOME=/tmp \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/results:/app/results \
-  harmoni python main.py --config data/cfgs/harmoni.yaml \
-    --video data/demo/giphy.gif \
-    --out_folder /app/results/giphy \
-    --keep all --save_gif
-```
-
-### Run — Audio model
-Use `/opt/venv_audio/bin/python` to run the audio pipeline (Python 3.7):
-```bash
-docker run --gpus all --user $(id -u):$(id -g) -e HOME=/tmp \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/results:/app/results \
-  harmoni /opt/venv_audio/bin/python audio/run.py \
-    data/demo/seedlings.mp4 /app/results/seedlings/
-```
-
-## Code structure
-```bash
-- preprocess # code for preprocessing: downsample, shot detection, ground plane estimation
-- trackers # tracking
-- detectors  # e.g. openpose, midas, body type classifier
-- hps # human pose and shape models. e.g. DAPA
-- postprocess  # code for refinement. e.g. SMPLify, One Euro Filter.
-- visualization  # renderers and helpers for visualization
-- downstream # code for downstream analysis
-- audio # audio code
-- data  # see Installation for full structure
-```
-
-Output folder structure
-```bash
-- openpose
-- sampled_tracks
-- render
-- results.pkl
-- dataset.pkl
-- result.mp4  # if --save_video is on
-- result.gif  # if --save_gif is on
 ```
 
 ## Related Resources
